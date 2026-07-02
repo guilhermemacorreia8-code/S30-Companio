@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S30 Cosmic Companion</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0b0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/style.css" />
+
+  <script>
+    // Watchdog inline — não depende de css/js externos, pra funcionar mesmo se
+    // a estrutura de pastas (css/, js/) tiver se perdido no download/extração.
+    (function () {
+      var missing = [];
+      window.addEventListener('error', function (e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          missing.push(e.target.getAttribute('src') || e.target.getAttribute('href'));
+        }
+      }, true);
+
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var appOk = typeof window.App !== 'undefined';
+          if (!appOk || missing.length) {
+            var el = document.getElementById('app-root');
+            if (!el) return;
+            el.innerHTML =
+              '<div style="max-width:560px;margin:60px auto;padding:24px;' +
+              'background:#131826;border:1px solid #e8935a;border-radius:14px;' +
+              'color:#e8eaed;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;">' +
+              '<div style="font-weight:700;color:#e8935a;margin-bottom:10px;">' +
+              'Arquivos do projeto não carregaram</div>' +
+              '<p>' + (missing.length
+                ? 'Estes arquivos não foram encontrados: <code>' + missing.join('</code>, <code>') + '</code>.'
+                : 'O app.js não inicializou.') + '</p>' +
+              '<p><strong>Causa provável:</strong> as pastas <code>css/</code> e <code>js/</code> não estão ' +
+              'junto do <code>index.html</code> na mesma pasta. Confere se você extraiu o .zip inteiro ' +
+              '(não só o index.html) e se a estrutura ficou assim:</p>' +
+              '<pre style="background:#0b0e14;border:1px solid rgba(139,147,167,.16);border-radius:8px;' +
+              'padding:12px 14px;overflow-x:auto;">index.html\ncss/style.css\njs/app.js\njs/db.js\n...</pre>' +
+              '</div>';
+          }
+        }, 1500);
+      });
+    })();
+  </script>
+</head>
+<body>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="app-logo"><span class="ring"></span> S30 Cosmic Companion</div>
+        <div id="sidebar-auth"></div>
+        <input type="text" class="search-input" id="global-search" placeholder="Buscar objeto..." />
+      </div>
+
+      <nav class="sidebar-filters">
+        <div class="sidebar-section-label">Visões</div>
+        <button class="chip chip--block" id="btn-view-coverage">📊 Cobertura Messier</button>
+        <button class="chip chip--block" id="btn-view-dashboard">📅 Dashboard anual</button>
+      </nav>
+
+      <nav class="sidebar-filters">
+        <div class="sidebar-section-label">Filtrar por tipo</div>
+        <button class="chip chip--block" data-type="nebulosa">Nebulosa</button>
+        <button class="chip chip--block" data-type="galaxia">Galáxia</button>
+        <button class="chip chip--block" data-type="aglomerado">Aglomerado</button>
+        <button class="chip chip--block" data-type="planeta">Planeta</button>
+      </nav>
+
+      <div class="sidebar-stats" id="sidebar-stats"></div>
+
+      <div class="sidebar-location" id="sidebar-location"><!-- preenchido via app.js --></div>
+
+      <div class="sidebar-actions">
+        <button class="btn-primary" id="btn-new-photo">+ Nova foto</button>
+        <button class="btn-secondary" id="btn-new-object">+ Novo alvo</button>
+        <button class="btn-secondary" id="btn-import-atlas">Importar do ATLAS</button>
+        <button class="btn-secondary" id="btn-view-atlas-suggestion" style="display:none;">Ver sugestão do ATLAS</button>
+        <input type="file" id="atlas-file-input" accept="application/json,.json" style="display:none;" />
+        <input type="file" id="global-dropzone-input" accept="image/*" style="display:none;" />
+      </div>
+
+      <div class="sidebar-actions">
+        <div class="sidebar-section-label">Dados</div>
+        <button class="btn-secondary" id="btn-backup">⬇ Backup (.json)</button>
+        <button class="btn-secondary" id="btn-restore">⬆ Restaurar backup</button>
+        <input type="file" id="restore-file-input" accept="application/json,.json" style="display:none;" />
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <div id="atlas-panel-container"></div>
+      <main id="app-root"><!-- catálogo ou detalhe, renderizado via ui.js --></main>
+    </div>
+  </div>
+
+  <div id="modal-root"><!-- modal de upload/formulário --></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/exif.js"></script>
+  <script src="js/upload.js"></script>
+  <script src="js/atlas.js"></script>
+  <script src="js/wiki.js"></script>
+  <script src="js/moon.js"></script>
+  <script src="js/sky-season.js"></script>
+  <script src="js/reference-catalog.js"></script>
+  <script src="js/constellation-data.js"></script>
+  <script src="js/astro-events.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/locations.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+    }
+  </script>
+</body>
+</html>
