@@ -23,3 +23,4 @@ No **IndexedDB do navegador do dispositivo que você usou**. Elas não vão pro 
 ## Atualizar o app depois de mudanças
 
 Incremente `CACHE_NAME` em `sw.js` (ex: `s30-companion-v2`) antes de fazer push. Isso força o navegador a baixar a versão nova.
+Commit changes
