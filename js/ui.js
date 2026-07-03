@@ -456,6 +456,11 @@ window.UI = (function () {
 
   function renderObjectDetail(obj, photos, handlers) {
     handlers = handlers || {};
+    const mainPhotos = photos.filter((p) => !p.isDetail);
+    const detailsByParent = {};
+    photos.filter((p) => p.isDetail).forEach((d) => {
+      (detailsByParent[d.parentPhotoId] = detailsByParent[d.parentPhotoId] || []).push(d);
+    });
     const totalExposure = photos.reduce((acc, p) => acc + (p.exposureSeconds || 0), 0);
     const target = window.Catalog.getExposureTarget(obj);
     const isSolarSystemBody = obj.type === 'planeta';
@@ -463,7 +468,7 @@ window.UI = (function () {
     const dataRows = isSolarSystemBody
       ? [
           ['MAGNITUDE', obj.magnitude ?? '—'],
-          ['SESSÕES', photos.length],
+          ['SESSÕES', mainPhotos.length],
           ['EXPOSIÇÃO TOTAL', formatExposure(totalExposure)],
         ]
       : [
@@ -473,7 +478,7 @@ window.UI = (function () {
           ['TAMANHO', obj.sizeArcmin ? `${obj.sizeArcmin}′` : '—'],
           ['MAGNITUDE', obj.magnitude ?? '—'],
           ['FILTRO RECOMENDADO', target.filter],
-          ['SESSÕES', photos.length],
+          ['SESSÕES', mainPhotos.length],
           ['EXPOSIÇÃO TOTAL', formatExposure(totalExposure)],
         ];
 
@@ -510,15 +515,15 @@ window.UI = (function () {
           <div class="panel">
             <div class="panel__title">Meta de integração <span class="panel__title-hint">heurística, não é SNR calculado</span></div>
             ${renderExposureBar(obj, totalExposure)}
-            ${photos.length ? `<div class="panel__subtitle">Contribuição por sessão</div>${renderSessionChart(photos)}` : ''}
+            ${mainPhotos.length ? `<div class="panel__subtitle">Contribuição por sessão</div>${renderSessionChart(mainPhotos)}` : ''}
           </div>
         </div>
 
-        ${photos.length >= 2 ? renderComparePanel(photos) : ''}
+        ${mainPhotos.length >= 2 ? renderComparePanel(mainPhotos) : ''}
 
         <div class="panel">
-          <div class="panel__title">Linha do tempo (${photos.length})</div>
-          ${photos.length ? renderTimeline(photos) : '<p style="color:var(--ink-dim); font-size:13px;">Nenhuma foto ainda.</p>'}
+          <div class="panel__title">Linha do tempo (${mainPhotos.length})</div>
+          ${mainPhotos.length ? renderTimeline(mainPhotos, detailsByParent) : '<p style="color:var(--ink-dim); font-size:13px;">Nenhuma foto ainda.</p>'}
         </div>
 
         <div class="panel">
@@ -535,8 +540,8 @@ window.UI = (function () {
         </div>
       </div>`;
 
-    if (photos.length >= 2) wireCompare(photos);
-    wireTimeline(photos, handlers.onSetCover, handlers.onEdit, handlers.onDelete);
+    if (mainPhotos.length >= 2) wireCompare(mainPhotos);
+    wireTimeline(mainPhotos, handlers.onSetCover, handlers.onEdit, handlers.onDelete, handlers.onAddDetail, detailsByParent, obj);
   }
 
   function renderComparePanel(photos) {
@@ -562,12 +567,14 @@ window.UI = (function () {
       </div>`;
   }
 
-  function renderTimeline(photos) {
+  function renderTimeline(photos, detailsByParent) {
+    detailsByParent = detailsByParent || {};
     return `
       <div class="timeline">
         <div class="timeline__line"></div>
         ${photos.map((p, i) => {
           const moon = window.Moon.phaseForDate(new Date(p.captureDate));
+          const details = detailsByParent[p.id] || [];
           return `
           <div class="timeline-item" data-photo-index="${i}" tabindex="0" role="button">
             <div class="timeline-item__dot"></div>
@@ -577,6 +584,7 @@ window.UI = (function () {
                 : `<div class="timeline-item__placeholder">Sem foto<br />só sessão</div>`}
               ${p.exposureSeconds ? `<span class="timeline-item__exposure">${formatExposure(p.exposureSeconds)}</span>` : ''}
               ${p.objectUrl ? `<button class="timeline-item__star ${p.isCover ? 'is-cover' : ''}" data-star-index="${i}" title="Definir como capa do alvo" aria-label="Definir como capa">★</button>` : ''}
+              ${details.length ? `<button class="timeline-item__detail-badge" data-detail-parent-index="${i}" title="${details.length} detalhe(s)">🔍 ${details.length}</button>` : ''}
             </div>
             <div class="timeline-item__date">${formatDate(p.captureDate)}</div>
             <div class="timeline-item__moon">🌙 ${moon.illumination}%</div>
@@ -585,9 +593,10 @@ window.UI = (function () {
       </div>`;
   }
 
-  function wireTimeline(photos, onSetCover, onEdit, onDelete) {
+  function wireTimeline(photos, onSetCover, onEdit, onDelete, onAddDetail, detailsByParent, obj) {
+    detailsByParent = detailsByParent || {};
     document.querySelectorAll('.timeline-item').forEach((el) => {
-      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit, onDelete);
+      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit, onDelete, onAddDetail, obj);
       el.addEventListener('click', open);
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     });
@@ -599,11 +608,21 @@ window.UI = (function () {
         if (onSetCover) onSetCover(photos[idx].id);
       });
     });
+
+    document.querySelectorAll('.timeline-item__detail-badge').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = Number(btn.dataset.detailParentIndex);
+        const parent = photos[idx];
+        const group = [parent, ...(detailsByParent[parent.id] || [])];
+        openLightbox(group, 0, onEdit, onDelete, onAddDetail, obj);
+      });
+    });
   }
 
   // ---------- Lightbox (visualização ampliada) ----------
 
-  function openLightbox(photos, index, onEdit, onDelete) {
+  function openLightbox(photos, index, onEdit, onDelete, onAddDetail, obj) {
     let current = index;
 
     function render() {
@@ -638,7 +657,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                ${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
+                ${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '') ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
               </div>
             </div>
           </div>
@@ -653,6 +672,18 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
+      if (p.objectUrl && !/\.tiff?$/i.test(p.fileName || '')) {
+        document.getElementById('lightbox-share').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openInstagramExport(p, obj);
+        });
+      }
+      if (p.objectUrl && !p.isDetail) {
+        document.getElementById('lightbox-add-detail').addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (onAddDetail) onAddDetail(p, () => closeModal());
+        });
+      }
       if (p.objectUrl) {
         document.getElementById('lightbox-download').addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1166,6 +1197,153 @@ window.UI = (function () {
     });
   }
 
+  // ---------- Exportar card pro Instagram ----------
+
+  const INSTAGRAM_HANDLE = '@monte.universo';
+  const IG_FORMATS = {
+    square: { w: 1080, h: 1080, label: '1:1' },
+    portrait: { w: 1080, h: 1350, label: '4:5' },
+    story: { w: 1080, h: 1920, label: '9:16' },
+  };
+
+  function openInstagramExport(photo, obj) {
+    let format = 'portrait';
+
+    modalRoot().innerHTML = `
+      <div class="modal-overlay" id="ig-export-overlay">
+        <div class="modal" style="max-width:420px;">
+          <h2 class="modal__title">Exportar pro Instagram</h2>
+          <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <button class="btn-secondary ig-format-btn" data-format="square" style="flex:1;">1:1</button>
+            <button class="btn-secondary ig-format-btn" data-format="portrait" style="flex:1;">4:5</button>
+            <button class="btn-secondary ig-format-btn" data-format="story" style="flex:1;">9:16</button>
+          </div>
+          <canvas id="ig-preview-canvas" style="width:100%; border-radius:8px; display:block;"></canvas>
+          <div class="modal__actions">
+            <button class="btn-secondary" id="btn-cancel-ig">Cancelar</button>
+            <button class="btn-primary" id="btn-download-ig" style="margin-left:0;">Baixar</button>
+          </div>
+        </div>
+      </div>`;
+
+    const canvas = document.getElementById('ig-preview-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.src = photo.objectUrl;
+
+    function draw() {
+      const { w, h } = IG_FORMATS[format];
+      canvas.width = w;
+      canvas.height = h;
+
+      // fundo + foto cobrindo o quadro (cover)
+      ctx.fillStyle = '#0b0e14';
+      ctx.fillRect(0, 0, w, h);
+      const scale = Math.max(w / img.width, h / img.height);
+      const iw = img.width * scale, ih = img.height * scale;
+      ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
+
+      // watermark topo
+      ctx.fillStyle = '#e8eaed';
+      ctx.font = `600 ${Math.round(w * 0.024)}px Arial`;
+      ctx.fillText('◎ S30 Cosmic Companion', w * 0.04, h * 0.05);
+
+      // scrim inferior
+      const scrimH = h * 0.32;
+      const grad = ctx.createLinearGradient(0, h - scrimH, 0, h);
+      grad.addColorStop(0, 'rgba(11,14,20,0)');
+      grad.addColorStop(0.4, 'rgba(11,14,20,0.75)');
+      grad.addColorStop(1, 'rgba(11,14,20,0.96)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, h - scrimH, w, scrimH);
+
+      const padX = w * 0.045;
+      let y = h - scrimH * 0.72;
+
+      ctx.fillStyle = '#e8935a';
+      ctx.font = `${Math.round(w * 0.018)}px monospace`;
+      ctx.fillText(obj.catalog, padX, y);
+      y += w * 0.045;
+
+      ctx.fillStyle = '#e8eaed';
+      ctx.font = `600 ${Math.round(w * 0.038)}px Arial`;
+      ctx.fillText(obj.commonName, padX, y);
+      y += w * 0.05;
+
+      const techBits = [
+        photo.frames ? `${photo.frames} frames × ${photo.secondsPerFrame}s = ${formatExposure(photo.exposureSeconds)}` : (photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : null),
+        photo.location || null,
+      ].filter(Boolean).join('   ·   ');
+      ctx.fillStyle = '#8b93a7';
+      ctx.font = `${Math.round(w * 0.016)}px monospace`;
+      ctx.fillText(techBits, padX, y);
+      y += w * 0.035;
+
+      ctx.fillStyle = '#5ec8d8';
+      ctx.font = `${Math.round(w * 0.015)}px monospace`;
+      ctx.fillText(INSTAGRAM_HANDLE, padX, h - scrimH * 0.12);
+    }
+
+    img.onload = draw;
+
+    document.querySelectorAll('.ig-format-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        format = btn.dataset.format;
+        draw();
+      });
+    });
+
+    document.getElementById('btn-cancel-ig').addEventListener('click', closeModal);
+    document.getElementById('ig-export-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'ig-export-overlay') closeModal();
+    });
+    document.getElementById('btn-download-ig').addEventListener('click', () => {
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${obj.id}_${IG_FORMATS[format].label.replace(':', 'x')}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    });
+  }
+
+  // ---------- Modal de detalhe (crop já pronto, vinculado a uma foto existente) ----------
+
+  function openDetailUploadForm({ file, parentPhoto, onSubmit, onCancel }) {
+    const previewUrl = URL.createObjectURL(file);
+
+    modalRoot().innerHTML = `
+      <div class="modal-overlay" id="detail-upload-overlay">
+        <div class="modal">
+          <h2 class="modal__title">Adicionar detalhe</h2>
+          <p class="hint" style="margin-bottom:16px;">Recorte de ${formatDate(parentPhoto.captureDate)} — não conta como sessão nova nem soma exposição.</p>
+          <img src="${previewUrl}" style="width:100%;border-radius:8px;margin-bottom:16px;display:block;" />
+          <div class="form-field">
+            <label>Notas (opcional)</label>
+            <textarea id="detail-field-notes" rows="2" placeholder="ex: close no pilar central"></textarea>
+          </div>
+          <div class="modal__actions">
+            <button class="btn-secondary" id="btn-cancel-detail">Cancelar</button>
+            <button class="btn-primary" id="btn-confirm-detail" style="margin-left:0;">Salvar detalhe</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('btn-cancel-detail').addEventListener('click', () => { closeModal(); if (onCancel) onCancel(); });
+    document.getElementById('detail-upload-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'detail-upload-overlay') { closeModal(); if (onCancel) onCancel(); }
+    });
+    document.getElementById('btn-confirm-detail').addEventListener('click', async () => {
+      const notes = document.getElementById('detail-field-notes').value.trim();
+      closeModal();
+      await onSubmit({ notes });
+    });
+  }
+
   // ---------- Modal de registro de sessão (sem foto, só pra preencher a barra) ----------
 
   function openSessionForm({ objectId, objectsList, onSubmit, defaultLocation }) {
@@ -1267,6 +1445,7 @@ window.UI = (function () {
     wireCoveragePanel,
     renderYearlyDashboard,
     openUploadForm,
+    openDetailUploadForm,
     openEditPhotoForm,
     openSessionForm,
     openAddObjectForm,

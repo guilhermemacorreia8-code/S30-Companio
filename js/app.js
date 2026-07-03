@@ -347,6 +347,10 @@ python3 -m http.server 8000</pre>
         await refreshData();
         route();
       },
+      onAddDetail: (parentPhoto, closeLightbox) => {
+        closeLightbox();
+        triggerDetailFilePick(parentPhoto.id);
+      },
     });
 
     document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });
@@ -402,6 +406,14 @@ python3 -m http.server 8000</pre>
       if (e.target.files.length) handleIncomingFile(e.target.files[0], fileInput.dataset.objectIdHint || null);
       e.target.value = '';
       delete fileInput.dataset.objectIdHint;
+    });
+
+    const detailInput = document.getElementById('detail-upload-input');
+    detailInput.addEventListener('change', (e) => {
+      const parentPhotoId = Number(detailInput.dataset.parentPhotoId);
+      if (e.target.files.length) handleIncomingDetailFile(e.target.files[0], parentPhotoId);
+      e.target.value = '';
+      delete detailInput.dataset.parentPhotoId;
     });
 
     document.getElementById('btn-import-atlas').addEventListener('click', () => {
@@ -475,6 +487,50 @@ python3 -m http.server 8000</pre>
     const fileInput = document.getElementById('global-dropzone-input');
     if (objectIdHint) fileInput.dataset.objectIdHint = objectIdHint;
     fileInput.click();
+  }
+
+  function triggerDetailFilePick(parentPhotoId) {
+    const detailInput = document.getElementById('detail-upload-input');
+    detailInput.dataset.parentPhotoId = parentPhotoId;
+    detailInput.click();
+  }
+
+  async function handleIncomingDetailFile(file, parentPhotoId) {
+    const parentPhoto = Object.values(photosByObject).flat().find((p) => p.id === parentPhotoId);
+    if (!parentPhoto) return;
+
+    window.UI.openDetailUploadForm({
+      file,
+      parentPhoto,
+      onSubmit: async ({ notes }) => {
+        const photo = {
+          objectId: parentPhoto.objectId,
+          blob: file,
+          fileName: file.name,
+          captureDate: parentPhoto.captureDate,
+          isDetail: true,
+          parentPhotoId: parentPhoto.id,
+          notes: notes || '',
+          exposureSeconds: null,
+          frames: null,
+          secondsPerFrame: null,
+          gain: null,
+          filterUsed: null,
+          dither: false,
+          captureSoftware: null,
+          location: null,
+          exifRaw: null,
+          addedAt: new Date().toISOString(),
+        };
+        const photoId = await window.DB.addPhoto(photo);
+        if (window.Sync.isLoggedIn()) {
+          window.Sync.uploadPhoto({ ...photo, id: photoId }).catch(() => {});
+        }
+        await refreshData();
+        route();
+      },
+      onCancel: () => {},
+    });
   }
 
   async function handleIncomingFile(file, objectIdHint) {
