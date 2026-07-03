@@ -651,7 +651,7 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
-             document.getElementById('lightbox-delete').addEventListener('click', function(e) {
+             document.getElementById('lightbox-delete').addEventListener('click', function(e) { 
           e.stopPropagation();
           if (confirm('Deletar esta foto? Não pode ser desfeito.')) {
             if (onDelete) onDelete(photos[current].id);
