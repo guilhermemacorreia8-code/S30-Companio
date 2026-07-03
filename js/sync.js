@@ -64,7 +64,7 @@ window.Sync = (function () {
   }
 
   function isLoggedIn() { return !!_session; }
-  function currentUser() { return _session?.user || null; }
+  function currentUser() { return _session ? _session.user : null; }
 
   // ---------- Upload de foto ----------
 
