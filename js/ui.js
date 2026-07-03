@@ -636,7 +636,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                <button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button>
+                <button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>
               </div>
             </div>
           </div>
@@ -651,12 +651,18 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
+             document.getElementById('lightbox-delete').addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (confirm('Deletar esta foto? Não pode ser desfeito.')) {
+            if (onDelete) onDelete(photos[current].id);
+          }
+      });
       if (photos.length > 1) {
         document.getElementById('lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); current = (current - 1 + photos.length) % photos.length; render(); });
         document.getElementById('lightbox-next').addEventListener('click', (e) => { e.stopPropagation(); current = (current + 1) % photos.length; render(); });
       }
     }
-
+ 
     render();
 
     function onKeydown(e) {
