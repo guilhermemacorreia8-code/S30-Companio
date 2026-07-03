@@ -338,6 +338,12 @@ python3 -m http.server 8000</pre>
           },
         });
       },
+      onDelete: async (photoId, closeLightbox) => {
+        await window.DB.deletePhoto(photoId);
+        closeLightbox();
+        await refreshData();
+        route();
+      },
     });
 
     document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });

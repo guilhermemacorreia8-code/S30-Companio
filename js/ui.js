@@ -536,7 +536,7 @@ window.UI = (function () {
       </div>`;
 
     if (photos.length >= 2) wireCompare(photos);
-    wireTimeline(photos, handlers.onSetCover, handlers.onEdit);
+    wireTimeline(photos, handlers.onSetCover, handlers.onEdit, handlers.onDelete);
   }
 
   function renderComparePanel(photos) {
@@ -585,9 +585,9 @@ window.UI = (function () {
       </div>`;
   }
 
-  function wireTimeline(photos, onSetCover, onEdit) {
+  function wireTimeline(photos, onSetCover, onEdit, onDelete) {
     document.querySelectorAll('.timeline-item').forEach((el) => {
-      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit);
+      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit, onDelete);
       el.addEventListener('click', open);
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     });
@@ -603,7 +603,7 @@ window.UI = (function () {
 
   // ---------- Lightbox (visualização ampliada) ----------
 
-  function openLightbox(photos, index, onEdit) {
+  function openLightbox(photos, index, onEdit, onDelete) {
     let current = index;
 
     function render() {
@@ -651,11 +651,11 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
-             document.getElementById('lightbox-delete').addEventListener('click', function(e) { 
-          e.stopPropagation();
-          if (confirm('Deletar esta foto? Não pode ser desfeito.')) {
-            if (onDelete) onDelete(photos[current].id);
-          }
+      document.getElementById('lightbox-delete').addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (confirm('Deletar esta foto? Não pode ser desfeito.')) {
+          if (onDelete) onDelete(photos[current].id, () => closeModal());
+        }
       });
       if (photos.length > 1) {
         document.getElementById('lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); current = (current - 1 + photos.length) % photos.length; render(); });
