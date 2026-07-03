@@ -85,6 +85,17 @@ window.Sync = (function () {
     await client().from('photos').delete().eq('id', row.id);
   }
 
+  async function wipeRemotePhotos() {
+    const session = await getSession();
+    if (!session) throw new Error('Não autenticado');
+    const uid = session.user.id;
+    const { data: files } = await client().storage.from('photos').list(uid);
+    if (files && files.length) {
+      await client().storage.from('photos').remove(files.map(f => uid + '/' + f.name));
+    }
+    await client().from('photos').delete().eq('user_id', uid);
+  }
+
   async function fullSync(onProgress) {
     const session = await getSession();
     if (!session) return { skipped: true };
@@ -123,5 +134,5 @@ window.Sync = (function () {
     return { objects: objects.length, photos: photos.length };
   }
 
-  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, deletePhoto: deletePhoto, fullSync: fullSync, pushAll: pushAll };
+  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, deletePhoto: deletePhoto, wipeRemotePhotos: wipeRemotePhotos, fullSync: fullSync, pushAll: pushAll };
 })();
