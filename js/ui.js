@@ -1236,52 +1236,105 @@ window.UI = (function () {
       canvas.width = w;
       canvas.height = h;
 
-      // fundo + foto cobrindo o quadro (cover)
       ctx.fillStyle = '#0b0e14';
       ctx.fillRect(0, 0, w, h);
-      const scale = Math.max(w / img.width, h / img.height);
-      const iw = img.width * scale, ih = img.height * scale;
-      ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
 
-      // watermark topo
+      const moon = window.Moon.phaseForDate(new Date(photo.captureDate));
+      const statsLine1 = photo.frames
+        ? `${photo.frames} frames × ${photo.secondsPerFrame}s = ${formatExposure(photo.exposureSeconds)}`
+        : (photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : null);
+      const statsLine2 = [photo.location || null, `🌙 ${moon.illumination}% (${moon.phaseName})`].filter(Boolean).join('   ·   ');
+
+      // watermark topo (sempre no mesmo lugar, fora da área da foto)
       ctx.fillStyle = '#e8eaed';
-      ctx.font = `600 ${Math.round(w * 0.024)}px Arial`;
-      ctx.fillText('◎ S30 Cosmic Companion', w * 0.04, h * 0.05);
+      ctx.font = `600 ${Math.round(w * 0.034)}px Arial`;
+      ctx.fillText('◎ S30 Cosmic Companion', w * 0.05, h * 0.045);
 
-      // scrim inferior
-      const scrimH = h * 0.32;
-      const grad = ctx.createLinearGradient(0, h - scrimH, 0, h);
-      grad.addColorStop(0, 'rgba(11,14,20,0)');
-      grad.addColorStop(0.4, 'rgba(11,14,20,0.75)');
-      grad.addColorStop(1, 'rgba(11,14,20,0.96)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, h - scrimH, w, scrimH);
+      if (format === 'story') {
+        // foto emoldurada (contain) — evita corte agressivo de foto paisagem num quadro 9:16
+        const frameX = w * 0.06, frameY = h * 0.09;
+        const frameW = w * 0.88, frameH = h * 0.48;
+        const scale = Math.min(frameW / img.width, frameH / img.height);
+        const iw = img.width * scale, ih = img.height * scale;
+        const ix = frameX + (frameW - iw) / 2, iy = frameY + (frameH - ih) / 2;
 
-      const padX = w * 0.045;
-      let y = h - scrimH * 0.72;
+        ctx.save();
+        roundRect(ctx, frameX, frameY, frameW, frameH, w * 0.02);
+        ctx.clip();
+        ctx.fillStyle = '#131826';
+        ctx.fillRect(frameX, frameY, frameW, frameH);
+        ctx.drawImage(img, ix, iy, iw, ih);
+        ctx.restore();
 
-      ctx.fillStyle = '#e8935a';
-      ctx.font = `${Math.round(w * 0.018)}px monospace`;
-      ctx.fillText(obj.catalog, padX, y);
-      y += w * 0.045;
+        drawInfoBlock(w * 0.06, h * 0.62, w * 0.88);
+      } else {
+        // 1:1 e 4:5 — foto cobrindo o quadro inteiro (cover)
+        const scale = Math.max(w / img.width, h / img.height);
+        const iw = img.width * scale, ih = img.height * scale;
+        ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
 
-      ctx.fillStyle = '#e8eaed';
-      ctx.font = `600 ${Math.round(w * 0.038)}px Arial`;
-      ctx.fillText(obj.commonName, padX, y);
-      y += w * 0.05;
+        const scrimH = h * 0.34;
+        const grad = ctx.createLinearGradient(0, h - scrimH, 0, h);
+        grad.addColorStop(0, 'rgba(11,14,20,0)');
+        grad.addColorStop(0.35, 'rgba(11,14,20,0.82)');
+        grad.addColorStop(1, 'rgba(11,14,20,0.97)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, h - scrimH, w, scrimH);
 
-      const techBits = [
-        photo.frames ? `${photo.frames} frames × ${photo.secondsPerFrame}s = ${formatExposure(photo.exposureSeconds)}` : (photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : null),
-        photo.location || null,
-      ].filter(Boolean).join('   ·   ');
-      ctx.fillStyle = '#8b93a7';
-      ctx.font = `${Math.round(w * 0.016)}px monospace`;
-      ctx.fillText(techBits, padX, y);
-      y += w * 0.035;
+        drawInfoBlock(w * 0.05, h - scrimH * 0.78, w * 0.9);
+      }
 
-      ctx.fillStyle = '#5ec8d8';
-      ctx.font = `${Math.round(w * 0.015)}px monospace`;
-      ctx.fillText(INSTAGRAM_HANDLE, padX, h - scrimH * 0.12);
+      function drawInfoBlock(x, y, maxW) {
+        ctx.fillStyle = '#e8935a';
+        ctx.font = `600 ${Math.round(w * 0.026)}px monospace`;
+        ctx.fillText(obj.catalog, x, y);
+        y += w * 0.055;
+
+        ctx.fillStyle = '#e8eaed';
+        ctx.font = `700 ${Math.round(w * 0.058)}px Arial`;
+        ctx.fillText(obj.commonName, x, y);
+        y += w * 0.07;
+
+        if (statsLine1) {
+          ctx.fillStyle = '#c7cbd6';
+          ctx.font = `${Math.round(w * 0.026)}px monospace`;
+          ctx.fillText(statsLine1, x, y);
+          y += w * 0.042;
+        }
+
+        ctx.fillStyle = '#8b93a7';
+        ctx.font = `${Math.round(w * 0.026)}px monospace`;
+        ctx.fillText(statsLine2, x, y);
+        y += w * 0.06;
+
+        ctx.strokeStyle = 'rgba(139,147,167,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + maxW, y);
+        ctx.stroke();
+        y += w * 0.045;
+
+        ctx.fillStyle = '#5a6178';
+        ctx.font = `${Math.round(w * 0.022)}px monospace`;
+        ctx.fillText('via SeeStar S30', x, y);
+
+        ctx.fillStyle = '#5ec8d8';
+        ctx.font = `600 ${Math.round(w * 0.024)}px monospace`;
+        ctx.textAlign = 'right';
+        ctx.fillText(INSTAGRAM_HANDLE, x + maxW, y);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function roundRect(context, x, y, width, height, r) {
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.arcTo(x + width, y, x + width, y + height, r);
+      context.arcTo(x + width, y + height, x, y + height, r);
+      context.arcTo(x, y + height, x, y, r);
+      context.arcTo(x, y, x + width, y, r);
+      context.closePath();
     }
 
     img.onload = draw;
