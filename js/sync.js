@@ -86,7 +86,9 @@ window.Sync = (function () {
       if (onProgress) onProgress('Baixando foto ' + (++n) + '...');
       let blob = null;
       if (rp.storage_path) { try { const { data } = await client().storage.from('photos').download(rp.storage_path); blob = data; } catch(e) {} }
-      await window.DB.addPhoto(Object.assign({}, rp.data, { blob: blob, id: undefined }));
+      var photoData = Object.assign({}, rp.data, { blob: blob });
+      delete photoData.id;
+      await window.DB.addPhoto(photoData);
     }
     return { objects: (objs||[]).length, newPhotos: n };
   }
