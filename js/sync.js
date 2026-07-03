@@ -53,11 +53,11 @@ window.Sync = (function () {
     }
     const meta = Object.assign({}, localPhoto);
     delete meta.blob; delete meta.objectUrl;
-    const { data: existing } = await client().from('photos').select('id').eq('user_id', uid).eq('local_id', localPhoto.id || 0).maybeSingle();
+    const { data: existing } = await client().from('photos').select('id').eq('user_id', uid).eq('local_id', localPhoto.id ? Number(localPhoto.id) : 0).maybeSingle();
     if (existing) {
       await client().from('photos').update({ storage_path: storagePath, data: Object.assign({}, meta, { storagePath: storagePath }), updated_at: new Date().toISOString() }).eq('id', existing.id);
     } else {
-      const { error } = await client().from('photos').insert({ local_id: localPhoto.id || null, user_id: uid, object_id: localPhoto.objectId, storage_path: storagePath, data: Object.assign({}, meta, { storagePath: storagePath }) });
+      const { error } = await client().from('photos').insert({ local_id: localPhoto.id ? Number(localPhoto.id) : null, user_id: uid, object_id: localPhoto.objectId, storage_path: storagePath, data: Object.assign({}, meta, { storagePath: storagePath }) });
       if (error) throw error;
     }
   }
