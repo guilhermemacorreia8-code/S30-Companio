@@ -73,6 +73,18 @@ window.Sync = (function () {
     if (error) throw error;
   }
 
+  async function deletePhoto(localId) {
+    const session = await getSession();
+    if (!session) return;
+    const uid = session.user.id;
+    const { data: row } = await client().from('photos').select('id,storage_path').eq('user_id', uid).eq('local_id', localId).maybeSingle();
+    if (!row) return;
+    if (row.storage_path) {
+      await client().storage.from('photos').remove([row.storage_path]);
+    }
+    await client().from('photos').delete().eq('id', row.id);
+  }
+
   async function fullSync(onProgress) {
     const session = await getSession();
     if (!session) return { skipped: true };
@@ -111,5 +123,5 @@ window.Sync = (function () {
     return { objects: objects.length, photos: photos.length };
   }
 
-  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, fullSync: fullSync, pushAll: pushAll };
+  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, deletePhoto: deletePhoto, fullSync: fullSync, pushAll: pushAll };
 })();

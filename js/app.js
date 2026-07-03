@@ -340,6 +340,9 @@ python3 -m http.server 8000</pre>
       },
       onDelete: async (photoId, closeLightbox) => {
         await window.DB.deletePhoto(photoId);
+        if (window.Sync.isLoggedIn()) {
+          window.Sync.deletePhoto(photoId).catch(() => {});
+        }
         closeLightbox();
         await refreshData();
         route();
