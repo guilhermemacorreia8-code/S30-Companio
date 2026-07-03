@@ -4,12 +4,16 @@ window.Sync = (function () {
 
   let _client  = null;
   let _session = null;
+  
 
   function client() {
     if (!_client) _client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     return _client;
   }
-
+// captura token do redirect OAuth
+  if (window.location.hash.includes('access_token')) {
+    setTimeout(function() { client().auth.getSession(); }, 500);
+  }
   async function signInWithGoogle() {
     const { error } = await client().auth.signInWithOAuth({
       provider: 'google',
