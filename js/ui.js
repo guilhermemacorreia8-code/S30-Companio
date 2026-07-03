@@ -621,9 +621,11 @@ window.UI = (function () {
           <button class="lightbox-close" id="lightbox-close" aria-label="Fechar">✕</button>
           ${photos.length > 1 ? '<button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" aria-label="Anterior">‹</button>' : ''}
           <div class="lightbox-content">
-            ${p.objectUrl
+            ${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '')
               ? `<img src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />`
-              : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
+              : p.objectUrl
+                ? `<div class="lightbox-placeholder">Preview indisponível para .TIFF — use o botão Baixar para visualizar</div>`
+                : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
             <div class="lightbox-caption">
               <div class="lightbox-caption__top">
                 <div>
@@ -636,7 +638,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                <button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
+                ${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
               </div>
             </div>
           </div>
@@ -651,6 +653,17 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
+      if (p.objectUrl) {
+        document.getElementById('lightbox-download').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const a = document.createElement('a');
+          a.href = p.objectUrl;
+          a.download = p.fileName || `${p.objectId || 'foto'}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        });
+      }
       document.getElementById('lightbox-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         if (confirm('Deletar esta foto? Não pode ser desfeito.')) {

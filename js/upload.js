@@ -67,7 +67,9 @@ window.Upload = (function () {
       })
     );
     el.addEventListener('drop', (e) => {
-      const files = Array.from(e.dataTransfer.files).filter((f) => /^image\//.test(f.type));
+      const files = Array.from(e.dataTransfer.files).filter((f) =>
+        /^image\//.test(f.type) || /\.(jpe?g|png|tiff?)$/i.test(f.name)
+      );
       if (files.length) onFiles(files);
     });
   }
