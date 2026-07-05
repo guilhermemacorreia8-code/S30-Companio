@@ -592,7 +592,7 @@ python3 -m http.server 8000</pre>
 
   // ---------- Import do ATLAS ----------
 
-  const ATLAS_SCORE_FLOOR = 50; // ignora "Tough"/score baixo — irrelevante pro S30
+  const ATLAS_SCORE_FLOOR = 70; // ignora "Tough"/score baixo — irrelevante pro S30
   const ATLAS_MAX_SUGGESTIONS = 20;
 
   async function handleAtlasImport(file) {
@@ -616,18 +616,43 @@ python3 -m http.server 8000</pre>
       .map(({ target, matchedObject }) => {
         let accumulatedSeconds = 0;
         let priority = target.score;
+        let reason = 'Alvo novo — ainda não catalogado';
 
         if (matchedObject) {
           const photos = photosByObject[matchedObject.id] || [];
-          accumulatedSeconds = photos.reduce((acc, p) => acc + (p.exposureSeconds || 0), 0);
-          const exposureTarget = window.Catalog.getExposureTarget(matchedObject);
-          const targetMinutes = exposureTarget.targetMinutes || 60;
-          const ratio = Math.min(1, (accumulatedSeconds / 60) / targetMinutes);
-          const gapFactor = 1 - ratio; // 1 = não começou, 0 = meta batida
-          priority = target.score * (0.4 + 0.6 * gapFactor);
+
+          if (matchedObject.type === 'planeta') {
+            // lucky imaging não acumula exposureSeconds — usa nº de sessões como
+            // proxy de progresso; nunca zera prioridade (sempre vale repetir Lua/Sol)
+            const sessionsCount = photos.length;
+            const gapFactor = sessionsCount === 0 ? 1 : Math.max(0.2, 1 - sessionsCount * 0.15);
+            priority = target.score * (0.4 + 0.6 * gapFactor);
+            reason = sessionsCount === 0 ? 'Alvo novo (lucky imaging)' : `Repetir — ${sessionsCount} sessão(ões) já feitas`;
+          } else {
+            accumulatedSeconds = photos.reduce((acc, p) => acc + (p.exposureSeconds || 0), 0);
+            const exposureTarget = window.Catalog.getExposureTarget(matchedObject);
+            const targetMinutes = exposureTarget.targetMinutes || 60;
+            const ratio = Math.min(1, (accumulatedSeconds / 60) / targetMinutes);
+            const gapFactor = 1 - ratio; // 1 = não começou, 0 = meta batida
+            priority = target.score * (0.4 + 0.6 * gapFactor);
+            reason = photos.length === 0 ? 'Alvo novo — ainda não catalogado' : `Completar — ${Math.round(ratio * 100)}% da meta de exposição`;
+
+            // se já tem histórico de SNR, pesa pelo retorno marginal real de continuar
+            const withSnr = photos.filter((p) => p.snrProxy != null);
+            if (withSnr.length >= 2) {
+              const prediction = window.Analysis.predictImprovement(
+                withSnr.map((p) => ({ exposureSeconds: p.exposureSeconds, snrProxy: p.snrProxy }))
+              );
+              if (prediction && prediction.improvementPct != null) {
+                const snrFactor = Math.min(1, Math.max(0.3, prediction.improvementPct / 30));
+                priority *= snrFactor;
+                reason += ` · +30min deve render ~${prediction.improvementPct}% de SNR`;
+              }
+            }
+          }
         }
 
-        return { target, matchedObject, accumulatedSeconds, priority };
+        return { target, matchedObject, accumulatedSeconds, priority, reason };
       })
       .sort((a, b) => b.priority - a.priority)
       .slice(0, ATLAS_MAX_SUGGESTIONS);

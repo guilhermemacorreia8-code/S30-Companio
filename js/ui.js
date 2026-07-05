@@ -112,7 +112,7 @@ window.UI = (function () {
   }
 
   function renderAtlasRow(item, index) {
-    const { target, matchedObject, accumulatedSeconds } = item;
+    const { target, matchedObject, accumulatedSeconds, reason } = item;
     const colorState = LABEL_COLOR[target.label] || 'mid';
     const bestTimeLocal = target.bestTime
       ? target.bestTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -128,6 +128,7 @@ window.UI = (function () {
         <div class="atlas-row__main">
           <div class="atlas-row__name">${escapeHtml(target.displayName)} <span class="atlas-row__catalog">${escapeHtml(target.catalogIdRaw)}</span></div>
           <div class="atlas-row__meta">melhor às ${bestTimeLocal} · visível ${target.durationHours ? target.durationHours.toFixed(1) : '—'}h · ${escapeHtml(target.label)}</div>
+          ${reason ? `<div class="atlas-row__reason">${escapeHtml(reason)}</div>` : ''}
           ${progressHtml}
         </div>
         ${!matchedObject ? `<button class="btn-secondary atlas-row__add" data-add-index="${index}">+ Adicionar</button>` : ''}
