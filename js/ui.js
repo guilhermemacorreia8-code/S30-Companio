@@ -410,7 +410,7 @@ window.UI = (function () {
     const cards = objects
       .map((obj) => {
         const photos = photosByObject[obj.id] || [];
-        const photosWithImage = photos.filter((p) => p.objectUrl);
+        const photosWithImage = photos.filter((p) => p.thumbUrl);
         const coverPhoto = photosWithImage.find((p) => p.isCover);
         const cover = coverPhoto || photosWithImage[photosWithImage.length - 1]; // capa escolhida > mais recente com imagem
         const totalExposure = photos.reduce((acc, p) => acc + (p.exposureSeconds || 0), 0);
@@ -422,7 +422,7 @@ window.UI = (function () {
             <div class="object-card__frame ${cover ? '' : 'object-card__frame--empty'}">
               <span class="object-card__badge">${escapeHtml(TYPE_LABELS[obj.type] || obj.type)}</span>
               ${isAtlasTop ? '<span class="object-card__badge object-card__badge--atlas">Top hoje</span>' : ''}
-              ${cover ? `<img src="${cover.objectUrl}" alt="${escapeHtml(obj.commonName)}" loading="lazy" />` : 'SEM FOTO AINDA'}
+              ${cover ? `<img src="${cover.thumbUrl}" alt="${escapeHtml(obj.commonName)}" loading="lazy" />` : 'SEM FOTO AINDA'}
 
               <div class="object-card__hover-panel">
                 <div class="data-grid data-grid--compact">
@@ -588,8 +588,8 @@ window.UI = (function () {
       <div class="panel">
         <div class="panel__title">Evolução</div>
         <div class="compare" id="compare-frame">
-          <img class="compare__before" id="compare-before-img" src="${first.objectUrl}" alt="antes" />
-          <img class="compare__after" id="compare-after-img" src="${last.objectUrl}" alt="depois" />
+          <img class="compare__before" id="compare-before-img" src="${first.thumbUrl}" alt="antes" />
+          <img class="compare__after" id="compare-after-img" src="${last.thumbUrl}" alt="depois" />
           <div class="compare__label compare__label--before">${formatDate(first.captureDate)}</div>
           <div class="compare__label compare__label--after">${formatDate(last.captureDate)}</div>
           <div class="compare__handle" id="compare-handle"></div>
@@ -613,11 +613,11 @@ window.UI = (function () {
           <div class="timeline-item" data-photo-index="${i}" tabindex="0" role="button">
             <div class="timeline-item__dot"></div>
             <div class="timeline-item__frame">
-              ${p.objectUrl
-                ? `<img src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" loading="lazy" />`
+              ${p.thumbUrl
+                ? `<img src="${p.thumbUrl}" alt="${formatDate(p.captureDate)}" loading="lazy" />`
                 : `<div class="timeline-item__placeholder">Sem foto<br />só sessão</div>`}
               ${p.exposureSeconds ? `<span class="timeline-item__exposure">${formatExposure(p.exposureSeconds)}</span>` : ''}
-              ${p.objectUrl ? `<button class="timeline-item__star ${p.isCover ? 'is-cover' : ''}" data-star-index="${i}" title="Definir como capa do alvo" aria-label="Definir como capa">★</button>` : ''}
+              ${p.thumbUrl ? `<button class="timeline-item__star ${p.isCover ? 'is-cover' : ''}" data-star-index="${i}" title="Definir como capa do alvo" aria-label="Definir como capa">★</button>` : ''}
               ${details.length ? `<button class="timeline-item__detail-badge" data-detail-parent-index="${i}" title="${details.length} detalhe(s)">🔍 ${details.length}</button>` : ''}
             </div>
             <div class="timeline-item__date">${formatDate(p.captureDate)}</div>
@@ -661,6 +661,7 @@ window.UI = (function () {
 
     function render() {
       const p = photos[current];
+      if (!p.objectUrl && p.blob) p.objectUrl = URL.createObjectURL(p.blob);
       const moon = window.Moon.phaseForDate(new Date(p.captureDate));
       const techBits = [
         p.filterUsed ? { duoband: 'Duo-band', broadband: 'Broadband', lp: 'Filtro LP', outro: 'Filtro outro' }[p.filterUsed] || p.filterUsed : null,
@@ -674,11 +675,9 @@ window.UI = (function () {
           <button class="lightbox-close" id="lightbox-close" aria-label="Fechar">✕</button>
           ${photos.length > 1 ? '<button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" aria-label="Anterior">‹</button>' : ''}
           <div class="lightbox-content">
-            ${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '')
+            ${p.objectUrl
               ? `<img src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />`
-              : p.objectUrl
-                ? `<div class="lightbox-placeholder">Preview indisponível para .TIFF — use o botão Baixar para visualizar</div>`
-                : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
+              : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
             <div class="lightbox-caption">
               <div class="lightbox-caption__top">
                 <div>
@@ -693,7 +692,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                ${p.objectUrl && !p.isDetail && !p.isLuckyImaging ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '') ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
+                ${p.objectUrl && !p.isDetail && !p.isLuckyImaging ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
               </div>
             </div>
           </div>
@@ -709,14 +708,22 @@ window.UI = (function () {
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
       if (p.objectUrl && !p.isDetail && !p.isLuckyImaging) {
-        document.getElementById('lightbox-analyze').addEventListener('click', (e) => {
+        document.getElementById('lightbox-analyze').addEventListener('click', async (e) => {
           e.stopPropagation();
-          const imgEl = document.querySelector('.lightbox-content img');
-          const result = window.Analysis.analyzePhoto(imgEl);
-          if (onAnalyze) onAnalyze(p, result);
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          btn.textContent = '🔬 Analisando...';
+          try {
+            const result = await window.Analysis.analyzePhoto(p.blob);
+            if (onAnalyze) onAnalyze(p, result);
+          } catch (err) {
+            console.error('[Lightbox] Falha ao analisar foto:', err);
+            btn.disabled = false;
+            btn.textContent = '🔬 Analisar';
+          }
         });
       }
-      if (p.objectUrl && !/\.tiff?$/i.test(p.fileName || '')) {
+      if (p.objectUrl) {
         document.getElementById('lightbox-share').addEventListener('click', (e) => {
           e.stopPropagation();
           openInstagramExport(p, obj);
@@ -731,12 +738,14 @@ window.UI = (function () {
       if (p.objectUrl) {
         document.getElementById('lightbox-download').addEventListener('click', (e) => {
           e.stopPropagation();
+          const downloadUrl = p.originalBlob ? URL.createObjectURL(p.originalBlob) : p.objectUrl;
           const a = document.createElement('a');
-          a.href = p.objectUrl;
+          a.href = downloadUrl;
           a.download = p.fileName || `${p.objectId || 'foto'}.jpg`;
           document.body.appendChild(a);
           a.click();
           a.remove();
+          if (p.originalBlob) URL.revokeObjectURL(downloadUrl);
         });
       }
       document.getElementById('lightbox-delete').addEventListener('click', function (e) {
@@ -761,8 +770,14 @@ window.UI = (function () {
     document.addEventListener('keydown', onKeydown);
 
     const originalClose = closeModal;
-    // garante que o listener de teclado é removido ao fechar
-    window.__lightboxKeydownCleanup = () => document.removeEventListener('keydown', onKeydown);
+    // garante que o listener de teclado é removido ao fechar, e libera a memória
+    // das fotos em resolução plena que foram carregadas sob demanda neste lightbox
+    window.__lightboxKeydownCleanup = () => {
+      document.removeEventListener('keydown', onKeydown);
+      photos.forEach((p) => {
+        if (p.objectUrl) { URL.revokeObjectURL(p.objectUrl); p.objectUrl = null; }
+      });
+    };
   }
 
   function wireCompare(photos) {
@@ -805,12 +820,12 @@ window.UI = (function () {
 
     selBefore.addEventListener('change', () => {
       const p = findPhoto(selBefore.value);
-      beforeImg.src = p.objectUrl;
+      beforeImg.src = p.thumbUrl;
       labelBefore.textContent = formatDate(p.captureDate);
     });
     selAfter.addEventListener('change', () => {
       const p = findPhoto(selAfter.value);
-      afterImg.src = p.objectUrl;
+      afterImg.src = p.thumbUrl;
       labelAfter.textContent = formatDate(p.captureDate);
     });
   }

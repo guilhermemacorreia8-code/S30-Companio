@@ -1,41 +1,29 @@
 window.Analysis = (function () {
-  function analyzePhoto(imgEl) {
-    const canvas = document.createElement('canvas');
-    canvas.width = imgEl.naturalWidth;
-    canvas.height = imgEl.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0);
-    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let worker = null;
+  let nextRequestId = 0;
+  const pending = {};
 
-    const lum = new Float32Array(width * height);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      lum[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  function getWorker() {
+    if (!worker) {
+      worker = new Worker('js/analysis.worker.js');
+      worker.onmessage = (e) => {
+        const { requestId, result, error } = e.data;
+        const entry = pending[requestId];
+        if (!entry) return;
+        delete pending[requestId];
+        if (error) entry.reject(new Error(error));
+        else entry.resolve(result);
+      };
     }
-    const sorted = Float32Array.from(lum).sort();
-    const clipped = sorted.filter((v) => v <= 1 || v >= 254).length / sorted.length;
+    return worker;
+  }
 
-    // fundo: percentil 5–15 (evita preto puro clipado)
-    const bgSlice = sorted.slice(Math.floor(sorted.length * 0.05), Math.floor(sorted.length * 0.15));
-    const bgMean = bgSlice.reduce((a, b) => a + b, 0) / bgSlice.length;
-    const bgNoise = Math.sqrt(bgSlice.reduce((a, b) => a + (b - bgMean) ** 2, 0) / bgSlice.length);
-
-    // sinal: percentil 90–99, recorte central 60% (evita vinheta de borda)
-    const cx0 = Math.floor(width * 0.2), cx1 = Math.floor(width * 0.8);
-    const cy0 = Math.floor(height * 0.2), cy1 = Math.floor(height * 0.8);
-    const central = [];
-    for (let y = cy0; y < cy1; y++) for (let x = cx0; x < cx1; x++) central.push(lum[y * width + x]);
-    central.sort((a, b) => a - b);
-    const sigSlice = central.slice(Math.floor(central.length * 0.9), Math.floor(central.length * 0.99));
-    const signalLevel = sigSlice.reduce((a, b) => a + b, 0) / sigSlice.length;
-
-    const snrProxy = bgNoise > 0 ? (signalLevel - bgMean) / bgNoise : null;
-
-    return {
-      bgNoise: Math.round(bgNoise * 100) / 100,
-      signalLevel: Math.round(signalLevel * 100) / 100,
-      snrProxy: snrProxy != null ? Math.round(snrProxy * 100) / 100 : null,
-      analysisConfidence: clipped > 0.15 ? 'baixa' : 'ok',
-    };
+  function analyzePhoto(blob) {
+    return new Promise((resolve, reject) => {
+      const requestId = ++nextRequestId;
+      pending[requestId] = { resolve, reject };
+      getWorker().postMessage({ blob, requestId });
+    });
   }
 
   // ajusta snr = k·√t nos pontos reais do usuário e projeta +30min

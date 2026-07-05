@@ -178,13 +178,20 @@ python3 -m http.server 8000</pre>
     allObjects = objects.sort((a, b) => a.commonName.localeCompare(b.commonName));
 
     // revoga URLs antigas antes de recriar (evita leak de memória)
-    Object.values(photosByObject).flat().forEach((p) => p.objectUrl && URL.revokeObjectURL(p.objectUrl));
+    Object.values(photosByObject).flat().forEach((p) => {
+      if (p.thumbUrl) URL.revokeObjectURL(p.thumbUrl);
+      if (p.objectUrl) URL.revokeObjectURL(p.objectUrl);
+    });
 
     photosByObject = {};
     photos
       .sort((a, b) => new Date(a.captureDate) - new Date(b.captureDate))
       .forEach((p) => {
-        p.objectUrl = p.blob ? URL.createObjectURL(p.blob) : null;
+        // grid/timeline usa só a miniatura leve; a foto em resolução plena
+        // (objectUrl) é criada sob demanda ao abrir o lightbox, não aqui —
+        // evita manter na memória o blob inteiro de toda foto o tempo todo.
+        p.thumbUrl = p.thumbBlob ? URL.createObjectURL(p.thumbBlob) : (p.blob ? URL.createObjectURL(p.blob) : null);
+        p.objectUrl = null;
         if (!photosByObject[p.objectId]) photosByObject[p.objectId] = [];
         photosByObject[p.objectId].push(p);
       });

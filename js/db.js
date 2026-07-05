@@ -142,6 +142,8 @@ window.DB = (function () {
       photos.map(async (p) => ({
         ...p,
         blob: p.blob ? await blobToBase64(p.blob) : null,
+        thumbBlob: p.thumbBlob ? await blobToBase64(p.thumbBlob) : null,
+        originalBlob: p.originalBlob ? await blobToBase64(p.originalBlob) : null,
       }))
     );
     return { version: DB_VERSION, exportedAt: new Date().toISOString(), objects, photos: photosSerialized };
@@ -171,7 +173,9 @@ window.DB = (function () {
     for (const photo of data.photos) {
       const { id, ...rest } = photo; // id é autoIncrement, deixa o DB gerar de novo
       const blob = rest.blob ? await base64ToBlob(rest.blob) : null;
-      await addPhoto({ ...rest, blob });
+      const thumbBlob = rest.thumbBlob ? await base64ToBlob(rest.thumbBlob) : null;
+      const originalBlob = rest.originalBlob ? await base64ToBlob(rest.originalBlob) : null;
+      await addPhoto({ ...rest, blob, thumbBlob, originalBlob });
     }
     return { objectsCount: data.objects.length, photosCount: data.photos.length };
   }
