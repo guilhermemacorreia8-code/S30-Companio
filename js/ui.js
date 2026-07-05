@@ -907,6 +907,7 @@ window.UI = (function () {
               <option value="galaxia">Galáxia</option>
               <option value="aglomerado">Aglomerado</option>
               <option value="planeta">Planeta</option>
+              <option value="paisagem">Paisagem (Via Láctea/céu amplo)</option>
               <option value="outro">Outro</option>
             </select>
           </div>
