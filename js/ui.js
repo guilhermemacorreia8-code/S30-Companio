@@ -11,6 +11,7 @@ window.UI = (function () {
     galaxia: 'Galáxia',
     aglomerado: 'Aglomerado',
     planeta: 'Planeta',
+    paisagem: 'Paisagem',
     outro: 'Outro',
   };
 
@@ -320,6 +321,42 @@ window.UI = (function () {
 
   // ---------- Dashboard anual ----------
 
+  function renderLandscapeGallery(objects, photosByObject) {
+    root().innerHTML = `
+      <div class="detail-view">
+        <button class="detail-back" id="btn-back">← Voltar ao catálogo</button>
+        <h1 class="detail-title__name" style="margin-bottom:20px;">🌌 Via Láctea</h1>
+
+        ${objects.length === 0 ? '<p style="color:var(--ink-dim);">Nenhuma paisagem cadastrada ainda — cria um objeto tipo "Paisagem" no + Novo alvo.</p>' : ''}
+
+        <div class="landscape-grid">
+          ${objects.map((obj) => {
+            const photos = (photosByObject[obj.id] || []).filter((p) => !p.isDetail);
+            const withThumb = photos.filter((p) => p.thumbUrl);
+            const cover = withThumb[withThumb.length - 1];
+            const last = photos[photos.length - 1];
+            const compBits = last
+              ? [
+                  last.compositionType === 'panoramica' ? 'Panorâmica' : (last.compositionType === 'composicao' ? 'Composição' : (last.compositionType === 'ceu' ? 'Só céu' : null)),
+                  last.panelCount ? `${last.panelCount} painéis` : null,
+                  last.location || null,
+                ].filter(Boolean).join(' · ')
+              : '';
+            return `
+              <article class="landscape-card" tabindex="0" role="button" data-object-id="${escapeHtml(obj.id)}">
+                <div class="landscape-card__frame">
+                  ${cover ? `<img src="${cover.thumbUrl}" alt="${escapeHtml(obj.commonName)}" loading="lazy" />` : '<div class="landscape-card__empty">SEM FOTO AINDA</div>'}
+                </div>
+                <div class="landscape-card__info">
+                  <div class="landscape-card__name">${escapeHtml(obj.commonName)}</div>
+                  <div class="landscape-card__meta">${photos.length} sessão(ões)${compBits ? ' · ' + escapeHtml(compBits) : ''}</div>
+                </div>
+              </article>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   function renderYearlyDashboard(yearStats) {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -470,8 +507,20 @@ window.UI = (function () {
     const totalExposure = photos.reduce((acc, p) => acc + (p.exposureSeconds || 0), 0);
     const target = window.Catalog.getExposureTarget(obj);
     const isSolarSystemBody = obj.type === 'planeta';
+    const isLandscape = obj.type === 'paisagem';
 
-    const dataRows = isSolarSystemBody
+    const dataRows = isLandscape
+      ? (() => {
+          const lastCapture = mainPhotos.length ? mainPhotos[mainPhotos.length - 1].captureDate : null;
+          const panels = mainPhotos.map((p) => p.panelCount || 0);
+          return [
+            ['SESSÕES', mainPhotos.length],
+            ['ÚLTIMA CAPTURA', lastCapture ? formatDate(lastCapture) : '—'],
+            ['LOCAL MAIS RECENTE', mainPhotos.length ? (mainPhotos[mainPhotos.length - 1].location || '—') : '—'],
+            ['MAIOR PANORÂMICA', panels.some(Boolean) ? `${Math.max(...panels)} painéis` : '—'],
+          ];
+        })()
+      : isSolarSystemBody
       ? (() => {
           const stacked = mainPhotos.map((p) => p.framesStacked || 0);
           const kept = mainPhotos.map((p) => p.framesKeptPercent || 0);
@@ -514,6 +563,7 @@ window.UI = (function () {
           <div class="panel">
             <div class="panel__title">Ficha do objeto</div>
             ${isSolarSystemBody ? '<p class="panel__note">Corpo do sistema solar — posição varia dia a dia (efeméride), por isso não mostramos RA/Dec fixos aqui.</p>' : ''}
+            ${isLandscape ? '<p class="panel__note">Paisagem/céu amplo — sem alvo pontual fixo, por isso não mostramos RA/Dec/magnitude aqui.</p>' : ''}
             <div class="data-grid">
               ${dataRows.map(([label, value]) => `
                 <div class="data-row">
@@ -532,7 +582,7 @@ window.UI = (function () {
         </div>
 
         ${mainPhotos.length >= 2 ? renderComparePanel(mainPhotos) : ''}
-        ${!isSolarSystemBody ? renderSignalPanel(mainPhotos) : ''}
+        ${!isSolarSystemBody && !isLandscape ? renderSignalPanel(mainPhotos) : ''}
 
         <div class="panel">
           <div class="panel__title">Linha do tempo (${mainPhotos.length})</div>
@@ -693,7 +743,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                ${p.objectUrl && !p.isDetail && !p.isLuckyImaging ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
+                ${p.objectUrl && !p.isDetail && !p.isLuckyImaging && (!obj || obj.type !== 'paisagem') ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
               </div>
             </div>
           </div>
@@ -708,7 +758,7 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
-      if (p.objectUrl && !p.isDetail && !p.isLuckyImaging) {
+      if (p.objectUrl && !p.isDetail && !p.isLuckyImaging && (!obj || obj.type !== 'paisagem')) {
         document.getElementById('lightbox-analyze').addEventListener('click', async (e) => {
           e.stopPropagation();
           const btn = e.currentTarget;
@@ -1001,6 +1051,7 @@ window.UI = (function () {
                 <option value="galaxia">Galáxia</option>
                 <option value="aglomerado">Aglomerado</option>
                 <option value="planeta">Planeta</option>
+                <option value="paisagem">Paisagem (Via Láctea/céu amplo)</option>
                 <option value="outro">Outro</option>
               </select>
             </div>
@@ -1038,6 +1089,27 @@ window.UI = (function () {
             <div class="form-field">
               <label>Frames empilhados</label>
               <input type="number" id="field-frames-stacked" min="0" step="1" placeholder="ex: 800" />
+            </div>
+          </div>
+
+          <div id="landscape-fields" style="display:none;">
+            <div class="form-field">
+              <label>Tipo de composição</label>
+              <select id="field-composition-type">
+                <option value="ceu">Só céu</option>
+                <option value="composicao">Composição (céu + primeiro plano)</option>
+                <option value="panoramica">Panorâmica</option>
+              </select>
+            </div>
+            <div class="form-field form-field--row">
+              <div>
+                <label>Lente/distância focal</label>
+                <input type="text" id="field-focal-length" placeholder="ex: 14mm f/2.8" />
+              </div>
+              <div>
+                <label>Nº de painéis (se panorâmica)</label>
+                <input type="number" id="field-panel-count" min="0" step="1" placeholder="ex: 5" />
+              </div>
             </div>
           </div>
 
@@ -1113,10 +1185,17 @@ window.UI = (function () {
       const obj = (objectsList || []).find((o) => o.id === selectObj.value);
       return !!obj && obj.type === 'planeta';
     }
+    function isLandscapeSelected() {
+      if (selectObj.value === '__new__') return newTypeSelect.value === 'paisagem';
+      const obj = (objectsList || []).find((o) => o.id === selectObj.value);
+      return !!obj && obj.type === 'paisagem';
+    }
     function updateCaptureFieldsVisibility() {
       const planet = isPlanetSelected();
-      document.getElementById('deepsky-fields').style.display = planet ? 'none' : 'block';
+      const landscape = isLandscapeSelected();
+      document.getElementById('deepsky-fields').style.display = (planet || landscape) ? 'none' : 'block';
       document.getElementById('lucky-fields').style.display = planet ? 'flex' : 'none';
+      document.getElementById('landscape-fields').style.display = landscape ? 'block' : 'none';
     }
     updateCaptureFieldsVisibility();
     selectObj.addEventListener('change', updateCaptureFieldsVisibility);
@@ -1131,12 +1210,16 @@ window.UI = (function () {
     document.getElementById('btn-confirm-upload').addEventListener('click', async () => {
       const isNewObject = selectObj.value === '__new__';
       const planetSession = isPlanetSelected();
-      const frames = planetSession ? null : (parseFloat(framesInput.value || '0') || null);
-      const secondsPerFrame = planetSession ? null : (parseFloat(secondsInput.value || '0') || null);
+      const landscapeSession = isLandscapeSelected();
+      const frames = (planetSession || landscapeSession) ? null : (parseFloat(framesInput.value || '0') || null);
+      const secondsPerFrame = (planetSession || landscapeSession) ? null : (parseFloat(secondsInput.value || '0') || null);
       const exposureSeconds = frames && secondsPerFrame ? frames * secondsPerFrame : null;
       const videoSeconds = planetSession ? (parseFloat(document.getElementById('field-video-seconds').value || '0') || null) : null;
       const framesKeptPercent = planetSession ? (parseFloat(document.getElementById('field-frames-kept-pct').value || '0') || null) : null;
       const framesStacked = planetSession ? (parseInt(document.getElementById('field-frames-stacked').value || '0', 10) || null) : null;
+      const compositionType = landscapeSession ? document.getElementById('field-composition-type').value : null;
+      const focalLength = landscapeSession ? document.getElementById('field-focal-length').value.trim() || null : null;
+      const panelCount = landscapeSession ? (parseInt(document.getElementById('field-panel-count').value || '0', 10) || null) : null;
 
       const formData = {
         objectId: isNewObject ? null : selectObj.value,
@@ -1151,6 +1234,9 @@ window.UI = (function () {
         videoSeconds,
         framesKeptPercent,
         framesStacked,
+        compositionType,
+        focalLength,
+        panelCount,
         gain: document.getElementById('field-gain').value ? parseInt(document.getElementById('field-gain').value, 10) : null,
         filterUsed: document.getElementById('field-filter').value || null,
         dither: document.getElementById('field-dither').checked,
@@ -1232,6 +1318,27 @@ window.UI = (function () {
             </div>
           </div>
 
+          <div id="edit-landscape-fields" style="display:none;">
+            <div class="form-field">
+              <label>Tipo de composição</label>
+              <select id="edit-field-composition-type">
+                <option value="ceu" ${photo.compositionType === 'ceu' ? 'selected' : ''}>Só céu</option>
+                <option value="composicao" ${photo.compositionType === 'composicao' ? 'selected' : ''}>Composição (céu + primeiro plano)</option>
+                <option value="panoramica" ${photo.compositionType === 'panoramica' ? 'selected' : ''}>Panorâmica</option>
+              </select>
+            </div>
+            <div class="form-field form-field--row">
+              <div>
+                <label>Lente/distância focal</label>
+                <input type="text" id="edit-field-focal-length" value="${escapeHtml(photo.focalLength || '')}" placeholder="ex: 14mm f/2.8" />
+              </div>
+              <div>
+                <label>Nº de painéis (se panorâmica)</label>
+                <input type="number" id="edit-field-panel-count" min="0" step="1" value="${photo.panelCount || ''}" placeholder="ex: 5" />
+              </div>
+            </div>
+          </div>
+
           <div class="form-field">
             <label>Local</label>
             <input type="text" id="edit-field-location" value="${escapeHtml(photo.location || '')}" placeholder="ex: São Paulo, SP" />
@@ -1293,10 +1400,16 @@ window.UI = (function () {
       const obj = (objectsList || []).find((o) => o.id === editObjSelect.value);
       return !!obj && obj.type === 'planeta';
     }
+    function editIsLandscapeSelected() {
+      const obj = (objectsList || []).find((o) => o.id === editObjSelect.value);
+      return !!obj && obj.type === 'paisagem';
+    }
     function updateEditFieldsVisibility() {
       const planet = editIsPlanetSelected();
-      document.getElementById('edit-deepsky-fields').style.display = planet ? 'none' : 'block';
+      const landscape = editIsLandscapeSelected();
+      document.getElementById('edit-deepsky-fields').style.display = (planet || landscape) ? 'none' : 'block';
       document.getElementById('edit-lucky-fields').style.display = planet ? 'flex' : 'none';
+      document.getElementById('edit-landscape-fields').style.display = landscape ? 'block' : 'none';
     }
     updateEditFieldsVisibility();
     editObjSelect.addEventListener('change', updateEditFieldsVisibility);
@@ -1308,18 +1421,22 @@ window.UI = (function () {
 
     document.getElementById('btn-confirm-edit').addEventListener('click', async () => {
       const planetSession = editIsPlanetSelected();
-      const f   = planetSession ? null : (parseFloat(framesInput.value || '0') || null);
-      const spf = planetSession ? null : (parseFloat(spfInput.value || '0') || null);
+      const landscapeSession = editIsLandscapeSelected();
+      const f   = (planetSession || landscapeSession) ? null : (parseFloat(framesInput.value || '0') || null);
+      const spf = (planetSession || landscapeSession) ? null : (parseFloat(spfInput.value || '0') || null);
       const fields = {
         objectId:          document.getElementById('edit-field-object').value,
         captureDate:       dateInputToISO(document.getElementById('edit-field-date').value),
         frames:            f,
         secondsPerFrame:   spf,
-        exposureSeconds:   planetSession ? null : ((f && spf) ? f * spf : photo.exposureSeconds),
+        exposureSeconds:   (planetSession || landscapeSession) ? null : ((f && spf) ? f * spf : photo.exposureSeconds),
         isLuckyImaging:    planetSession,
         videoSeconds:      planetSession ? (parseFloat(document.getElementById('edit-field-video-seconds').value || '0') || null) : null,
         framesKeptPercent: planetSession ? (parseFloat(document.getElementById('edit-field-frames-kept-pct').value || '0') || null) : null,
         framesStacked:     planetSession ? (parseInt(document.getElementById('edit-field-frames-stacked').value || '0', 10) || null) : null,
+        compositionType:   landscapeSession ? document.getElementById('edit-field-composition-type').value : null,
+        focalLength:       landscapeSession ? document.getElementById('edit-field-focal-length').value.trim() || null : null,
+        panelCount:        landscapeSession ? (parseInt(document.getElementById('edit-field-panel-count').value || '0', 10) || null) : null,
         location:          document.getElementById('edit-field-location').value.trim() || null,
         filterUsed:        document.getElementById('edit-field-filter').value || null,
         gain:              document.getElementById('edit-field-gain').value ? parseInt(document.getElementById('edit-field-gain').value) : null,
@@ -1764,6 +1881,7 @@ window.UI = (function () {
     renderCoveragePanel,
     wireCoveragePanel,
     renderYearlyDashboard,
+    renderLandscapeGallery,
     openUploadForm,
     openDetailUploadForm,
     openEditPhotoForm,

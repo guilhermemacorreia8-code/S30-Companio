@@ -203,12 +203,22 @@ python3 -m http.server 8000</pre>
     const hash = location.hash || '#/';
     if (hash === '#/coverage') { renderCoverageView(); return; }
     if (hash === '#/dashboard') { renderDashboardView(); return; }
+    if (hash === '#/landscapes') { renderLandscapesView(); return; }
     const match = hash.match(/^#\/object\/(.+)$/);
     if (match) {
       renderObjectView(decodeURIComponent(match[1]));
     } else {
       renderCatalogView();
     }
+  }
+
+  function renderLandscapesView() {
+    const landscapeObjects = allObjects.filter((o) => o.type === 'paisagem');
+    window.UI.renderLandscapeGallery(landscapeObjects, photosByObject);
+    document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });
+    document.querySelectorAll('.landscape-card').forEach((el) => {
+      el.addEventListener('click', () => { location.hash = `#/object/${encodeURIComponent(el.dataset.objectId)}`; });
+    });
   }
 
   function renderCoverageView() {
@@ -449,6 +459,7 @@ python3 -m http.server 8000</pre>
 
     document.getElementById('btn-view-coverage').addEventListener('click', () => { location.hash = '#/coverage'; });
     document.getElementById('btn-view-dashboard').addEventListener('click', () => { location.hash = '#/dashboard'; });
+    document.getElementById('btn-view-landscapes').addEventListener('click', () => { location.hash = '#/landscapes'; });
 
     document.getElementById('btn-backup').addEventListener('click', handleBackup);
 
