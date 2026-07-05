@@ -874,6 +874,45 @@ a { color: var(--accent-ion); text-decoration: none; }
 .atlas-row__name { font-family: var(--font-display); font-size: 14px; font-weight: 600; }
 .atlas-row__catalog { font-family: var(--font-mono); font-size: 11px; color: var(--accent-copper); font-weight: 400; margin-left: 4px; }
 .atlas-row__meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); margin: 3px 0 8px; }
+.atlas-row__reason { font-size: 12px; color: var(--accent-ion); margin: 0 0 8px; }
+
+.landscape-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.landscape-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  cursor: pointer;
+}
+.landscape-card:hover { border-color: var(--border-hairline-strong); }
+.landscape-card__frame {
+  width: 100%;
+  height: 220px;
+  background: var(--bg-void);
+  overflow: hidden;
+}
+.landscape-card__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* painéis largos ficam recortados só na altura, sem distorcer */
+}
+.landscape-card__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+.landscape-card__info { padding: 12px 16px; }
+.landscape-card__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.landscape-card__meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); margin-top: 3px; }
 .atlas-row__new { font-size: 12px; color: var(--ink-faint); font-style: italic; }
 .atlas-row__add { flex: 0 0 auto; white-space: nowrap; }
 
