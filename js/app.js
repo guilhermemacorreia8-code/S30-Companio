@@ -352,6 +352,14 @@ python3 -m http.server 8000</pre>
         closeLightbox();
         triggerDetailFilePick(parentPhoto.id);
       },
+      onAnalyze: async (photo, result) => {
+        await window.DB.updatePhoto(photo.id, result);
+        if (window.Sync.isLoggedIn() && photo.remoteId) {
+          window.Sync.uploadPhoto({ ...photo, ...result }).catch(() => {});
+        }
+        await refreshData();
+        route();
+      },
     });
 
     document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });

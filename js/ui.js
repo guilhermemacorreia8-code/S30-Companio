@@ -471,11 +471,17 @@ window.UI = (function () {
     const isSolarSystemBody = obj.type === 'planeta';
 
     const dataRows = isSolarSystemBody
-      ? [
-          ['MAGNITUDE', obj.magnitude ?? '—'],
-          ['SESSÕES', mainPhotos.length],
-          ['EXPOSIÇÃO TOTAL', formatExposure(totalExposure)],
-        ]
+      ? (() => {
+          const stacked = mainPhotos.map((p) => p.framesStacked || 0);
+          const kept = mainPhotos.map((p) => p.framesKeptPercent || 0);
+          const lastCapture = mainPhotos.length ? mainPhotos[mainPhotos.length - 1].captureDate : null;
+          return [
+            ['SESSÕES', mainPhotos.length],
+            ['ÚLTIMA CAPTURA', lastCapture ? formatDate(lastCapture) : '—'],
+            ['FRAMES EMPILHADOS (TOTAL)', stacked.reduce((a, b) => a + b, 0) || '—'],
+            ['MELHOR % APROVEITADO', kept.length ? `${Math.max(...kept)}%` : '—'],
+          ];
+        })()
       : [
           ['RA (J2000)', obj.ra],
           ['DEC (J2000)', obj.dec],
@@ -525,6 +531,7 @@ window.UI = (function () {
         </div>
 
         ${mainPhotos.length >= 2 ? renderComparePanel(mainPhotos) : ''}
+        ${!isSolarSystemBody ? renderSignalPanel(mainPhotos) : ''}
 
         <div class="panel">
           <div class="panel__title">Linha do tempo (${mainPhotos.length})</div>
@@ -546,7 +553,29 @@ window.UI = (function () {
       </div>`;
 
     if (mainPhotos.length >= 2) wireCompare(mainPhotos);
-    wireTimeline(mainPhotos, handlers.onSetCover, handlers.onEdit, handlers.onDelete, handlers.onAddDetail, detailsByParent, obj);
+    wireTimeline(mainPhotos, handlers.onSetCover, handlers.onEdit, handlers.onDelete, handlers.onAddDetail, detailsByParent, obj, handlers.onAnalyze);
+  }
+
+  function renderSignalPanel(photos) {
+    const withSnr = photos.filter((p) => p.snrProxy != null);
+    if (!withSnr.length) return '';
+    const prediction = window.Analysis.predictImprovement(
+      withSnr.map((p) => ({ exposureSeconds: p.exposureSeconds, snrProxy: p.snrProxy }))
+    );
+    return `
+      <div class="panel">
+        <div class="panel__title">Análise de sinal/ruído</div>
+        <div class="data-grid">
+          ${withSnr.map((p) => `
+            <div class="data-cell">
+              <div class="data-cell__label">${formatDate(p.captureDate)}</div>
+              <div class="data-cell__value">SNR proxy: ${p.snrProxy}${p.analysisConfidence === 'baixa' ? ' ⚠️' : ''}</div>
+            </div>`).join('')}
+        </div>
+        ${prediction && prediction.improvementPct != null
+          ? `<p class="panel__note">Nesse ritmo, +30min de integração deve melhorar o SNR em ~${prediction.improvementPct}%.</p>`
+          : ''}
+      </div>`;
   }
 
   function renderComparePanel(photos) {
@@ -598,10 +627,10 @@ window.UI = (function () {
       </div>`;
   }
 
-  function wireTimeline(photos, onSetCover, onEdit, onDelete, onAddDetail, detailsByParent, obj) {
+  function wireTimeline(photos, onSetCover, onEdit, onDelete, onAddDetail, detailsByParent, obj, onAnalyze) {
     detailsByParent = detailsByParent || {};
     document.querySelectorAll('.timeline-item').forEach((el) => {
-      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit, onDelete, onAddDetail, obj);
+      const open = () => openLightbox(photos, Number(el.dataset.photoIndex), onEdit, onDelete, onAddDetail, obj, onAnalyze);
       el.addEventListener('click', open);
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     });
@@ -620,14 +649,14 @@ window.UI = (function () {
         const idx = Number(btn.dataset.detailParentIndex);
         const parent = photos[idx];
         const group = [parent, ...(detailsByParent[parent.id] || [])];
-        openLightbox(group, 0, onEdit, onDelete, onAddDetail, obj);
+        openLightbox(group, 0, onEdit, onDelete, onAddDetail, obj, onAnalyze);
       });
     });
   }
 
   // ---------- Lightbox (visualização ampliada) ----------
 
-  function openLightbox(photos, index, onEdit, onDelete, onAddDetail, obj) {
+  function openLightbox(photos, index, onEdit, onDelete, onAddDetail, obj, onAnalyze) {
     let current = index;
 
     function render() {
@@ -664,7 +693,7 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                ${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '') ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
+                ${p.objectUrl && !p.isDetail && !p.isLuckyImaging ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl && !/\.tiff?$/i.test(p.fileName || '') ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button>  
               </div>
             </div>
           </div>
@@ -679,6 +708,14 @@ window.UI = (function () {
         e.stopPropagation();
         if (onEdit) onEdit(photos[current], () => closeModal());
       });
+      if (p.objectUrl && !p.isDetail && !p.isLuckyImaging) {
+        document.getElementById('lightbox-analyze').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const imgEl = document.querySelector('.lightbox-content img');
+          const result = window.Analysis.analyzePhoto(imgEl);
+          if (onAnalyze) onAnalyze(p, result);
+        });
+      }
       if (p.objectUrl && !/\.tiff?$/i.test(p.fileName || '')) {
         document.getElementById('lightbox-share').addEventListener('click', (e) => {
           e.stopPropagation();
