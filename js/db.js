@@ -208,6 +208,26 @@ window.DB = (function () {
     });
   }
 
+  async function dedupePhotos() {
+    const all = await getAllPhotos();
+    const groups = {};
+    all.forEach((p) => {
+      const key = p.objectId + '|' + p.captureDate + '|' + (p.fileName || '');
+      (groups[key] = groups[key] || []).push(p);
+    });
+    let removed = 0;
+    for (const key in groups) {
+      const group = groups[key];
+      if (group.length <= 1) continue;
+      group.sort((a, b) => (b.remoteId ? 1 : 0) - (a.remoteId ? 1 : 0) || a.id - b.id);
+      for (let i = 1; i < group.length; i++) {
+        await deletePhoto(group[i].id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   return {
     upsertObject,
     getObject,
@@ -215,6 +235,7 @@ window.DB = (function () {
     addPhoto,
     updatePhoto,
     deletePhoto,
+    dedupePhotos,
     getPhotosByObject,
     getAllPhotos,
     exportAll,

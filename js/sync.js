@@ -48,8 +48,8 @@ window.Sync = (function () {
     const session = await getSession();
     if (!session) throw new Error('Não autenticado');
     const uid = session.user.id;
-    let storagePath = null;
-    if (localPhoto.blob) {
+    let storagePath = localPhoto.storagePath || null;
+    if (localPhoto.blob && !localPhoto.remoteId) {
       const ext = (localPhoto.fileName || 'jpg').split('.').pop();
       storagePath = uid + '/' + localPhoto.id + '_' + Date.now() + '.' + ext;
       const { error } = await client().storage.from('photos').upload(storagePath, localPhoto.blob, { upsert: true });
@@ -57,12 +57,22 @@ window.Sync = (function () {
     }
     const meta = Object.assign({}, localPhoto);
     delete meta.blob; delete meta.objectUrl;
-    const { data: existing } = await client().from('photos').select('id').eq('user_id', uid).eq('local_id', localPhoto.id ? Number(localPhoto.id) : 0).maybeSingle();
-    if (existing) {
-      await client().from('photos').update({ storage_path: storagePath, data: Object.assign({}, meta, { storagePath: storagePath }), updated_at: new Date().toISOString() }).eq('id', existing.id);
+
+    if (localPhoto.remoteId) {
+      await client().from('photos').update({
+        storage_path: storagePath,
+        data: Object.assign({}, meta, { storagePath: storagePath }),
+        updated_at: new Date().toISOString(),
+      }).eq('id', localPhoto.remoteId);
     } else {
-      const { error } = await client().from('photos').insert({ local_id: localPhoto.id ? Number(localPhoto.id) : null, user_id: uid, object_id: localPhoto.objectId, storage_path: storagePath, data: Object.assign({}, meta, { storagePath: storagePath }) });
+      const { data: inserted, error } = await client().from('photos').insert({
+        user_id: uid,
+        object_id: localPhoto.objectId,
+        storage_path: storagePath,
+        data: Object.assign({}, meta, { storagePath: storagePath }),
+      }).select('id').single();
       if (error) throw error;
+      await window.DB.updatePhoto(localPhoto.id, { remoteId: inserted.id });
     }
   }
 
@@ -73,16 +83,15 @@ window.Sync = (function () {
     if (error) throw error;
   }
 
-  async function deletePhoto(localId) {
+  async function deletePhoto(remoteId) {
     const session = await getSession();
-    if (!session) return;
-    const uid = session.user.id;
-    const { data: row } = await client().from('photos').select('id,storage_path').eq('user_id', uid).eq('local_id', localId).maybeSingle();
+    if (!session || !remoteId) return;
+    const { data: row } = await client().from('photos').select('storage_path').eq('id', remoteId).maybeSingle();
     if (!row) return;
     if (row.storage_path) {
       await client().storage.from('photos').remove([row.storage_path]);
     }
-    await client().from('photos').delete().eq('id', row.id);
+    await client().from('photos').delete().eq('id', remoteId);
   }
 
   async function wipeRemotePhotos() {
@@ -103,21 +112,42 @@ window.Sync = (function () {
     const { data: objs } = await client().from('objects').select('data').eq('user_id', session.user.id);
     for (var i = 0; i < (objs || []).length; i++) await window.DB.upsertObject(objs[i].data);
     if (onProgress) onProgress('Baixando sessões...');
-    const { data: photos } = await client().from('photos').select('local_id,storage_path,data').eq('user_id', session.user.id).order('added_at', { ascending: true });
+    const { data: photos } = await client().from('photos').select('id,storage_path,data').eq('user_id', session.user.id).order('added_at', { ascending: true });
     const local = await window.DB.getAllPhotos();
-    const localIds = new Set(local.map(function(p) { return p.id; }));
+
+    function sigOf(objectId, captureDate, fileName) {
+      return objectId + '|' + captureDate + '|' + (fileName || '');
+    }
+    const byRemoteId = {};
+    const bySignature = {};
+    local.forEach(function (p) {
+      if (p.remoteId) byRemoteId[p.remoteId] = p;
+      bySignature[sigOf(p.objectId, p.captureDate, p.fileName)] = p;
+    });
+
     let n = 0;
     for (var j = 0; j < (photos || []).length; j++) {
       const rp = photos[j];
-      if (localIds.has(rp.local_id)) continue;
+      if (byRemoteId[rp.id]) continue; // já vinculada a um registro local
+
+      const sig = sigOf(rp.data.objectId, rp.data.captureDate, rp.data.fileName);
+      const existingLocal = bySignature[sig];
+      if (existingLocal) {
+        // mesma foto já existe localmente (sem remoteId ainda) — vincula em vez de duplicar
+        await window.DB.updatePhoto(existingLocal.id, { remoteId: rp.id });
+        byRemoteId[rp.id] = existingLocal;
+        continue;
+      }
+
       if (onProgress) onProgress('Baixando foto ' + (++n) + '...');
       let blob = null;
-      if (rp.storage_path) { try { const { data } = await client().storage.from('photos').download(rp.storage_path); blob = data; } catch(e) {} }
-      var photoData = Object.assign({}, rp.data, { blob: blob });
+      if (rp.storage_path) { try { const { data } = await client().storage.from('photos').download(rp.storage_path); blob = data; } catch (e) {} }
+      var photoData = Object.assign({}, rp.data, { blob: blob, remoteId: rp.id });
       delete photoData.id;
-      await window.DB.addPhoto(photoData);
+      const newId = await window.DB.addPhoto(photoData);
+      bySignature[sig] = { id: newId, objectId: photoData.objectId, captureDate: photoData.captureDate, fileName: photoData.fileName, remoteId: rp.id };
     }
-    return { objects: (objs||[]).length, newPhotos: n };
+    return { objects: (objs || []).length, newPhotos: n };
   }
 
   async function pushAll(onProgress) {

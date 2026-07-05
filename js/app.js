@@ -14,6 +14,7 @@ window.App = (function () {
   async function init() {
     try {
       await window.Catalog.seedIfEmpty();
+      await window.DB.dedupePhotos();
       await refreshData();
       wireGlobalEvents();
       wireLocationButton();
@@ -338,10 +339,10 @@ python3 -m http.server 8000</pre>
           },
         });
       },
-      onDelete: async (photoId, closeLightbox) => {
-        await window.DB.deletePhoto(photoId);
-        if (window.Sync.isLoggedIn()) {
-          window.Sync.deletePhoto(photoId).catch(() => {});
+      onDelete: async (photo, closeLightbox) => {
+        await window.DB.deletePhoto(photo.id);
+        if (window.Sync.isLoggedIn() && photo.remoteId) {
+          window.Sync.deletePhoto(photo.remoteId).catch(() => {});
         }
         closeLightbox();
         await refreshData();

@@ -34,6 +34,11 @@ window.UI = (function () {
     return `${m}m`;
   }
 
+  function dateInputToISO(v) {
+    const [y, m, d] = v.split('-').map(Number);
+    return new Date(y, m - 1, d, 12).toISOString();
+  }
+
   // ---------- Barra de meta de integração (SNR heurístico) ----------
 
   function renderExposureBar(obj, accumulatedSeconds) {
@@ -650,7 +655,9 @@ window.UI = (function () {
                 <div>
                   <div class="lightbox-caption__date">${formatDate(p.captureDate)}</div>
                   <div class="lightbox-caption__meta">
-                    ${p.exposureSeconds ? `${p.frames ? `${p.frames} frames × ${p.secondsPerFrame}s = ` : ''}${formatExposure(p.exposureSeconds)}` : 'exposição não informada'}
+                    ${p.isLuckyImaging
+                      ? [p.videoSeconds ? `vídeo ${p.videoSeconds}s` : null, p.framesKeptPercent ? `${p.framesKeptPercent}% aproveitados` : null, p.framesStacked ? `${p.framesStacked} frames empilhados` : null].filter(Boolean).join(' · ') || 'lucky imaging'
+                      : (p.exposureSeconds ? `${p.frames ? `${p.frames} frames × ${p.secondsPerFrame}s = ` : ''}${formatExposure(p.exposureSeconds)}` : 'exposição não informada')}
                     ${p.location ? ` · ${escapeHtml(p.location)}` : ''}
                     · lua ${moon.illumination}% (${moon.phaseName})
                   </div>
@@ -698,7 +705,7 @@ window.UI = (function () {
       document.getElementById('lightbox-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         if (confirm('Deletar esta foto? Não pode ser desfeito.')) {
-          if (onDelete) onDelete(photos[current].id, () => closeModal());
+          if (onDelete) onDelete(photos[current], () => closeModal());
         }
       });
       if (photos.length > 1) {
@@ -952,17 +959,34 @@ window.UI = (function () {
             <div class="hint">${exif.dateTimeOriginal ? 'Extraído do EXIF automaticamente' : 'Não encontrado no EXIF — confirme a data'}</div>
           </div>
 
-          <div class="form-field form-field--row">
-            <div>
-              <label>Frames</label>
-              <input type="number" id="field-frames" min="0" step="1" placeholder="ex: 120" />
+          <div id="deepsky-fields">
+            <div class="form-field form-field--row">
+              <div>
+                <label>Frames</label>
+                <input type="number" id="field-frames" min="0" step="1" placeholder="ex: 120" />
+              </div>
+              <div>
+                <label>Segundos/frame</label>
+                <input type="number" id="field-seconds-per-frame" min="0" step="1" value="${exif.exposureTimeSeconds ? Math.round(exif.exposureTimeSeconds) : ''}" placeholder="ex: 10" />
+              </div>
             </div>
-            <div>
-              <label>Segundos/frame</label>
-              <input type="number" id="field-seconds-per-frame" min="0" step="1" value="${exif.exposureTimeSeconds ? Math.round(exif.exposureTimeSeconds) : ''}" placeholder="ex: 10" />
+            <div class="form-field__computed" id="exposure-computed">= 0min de exposição total</div>
+          </div>
+
+          <div id="lucky-fields" class="form-field--row" style="display:none;">
+            <div class="form-field">
+              <label>Duração do vídeo (s)</label>
+              <input type="number" id="field-video-seconds" min="0" step="1" placeholder="ex: 60" />
+            </div>
+            <div class="form-field">
+              <label>% frames aproveitados</label>
+              <input type="number" id="field-frames-kept-pct" min="0" max="100" step="1" placeholder="ex: 30" />
+            </div>
+            <div class="form-field">
+              <label>Frames empilhados</label>
+              <input type="number" id="field-frames-stacked" min="0" step="1" placeholder="ex: 800" />
             </div>
           </div>
-          <div class="form-field__computed" id="exposure-computed">= 0min de exposição total</div>
 
           <div class="form-field">
             <label>Local</label>
@@ -1030,6 +1054,21 @@ window.UI = (function () {
     });
     if (selectObj.value === '__new__') newFields.style.display = 'block';
 
+    const newTypeSelect = document.getElementById('field-new-type');
+    function isPlanetSelected() {
+      if (selectObj.value === '__new__') return newTypeSelect.value === 'planeta';
+      const obj = (objectsList || []).find((o) => o.id === selectObj.value);
+      return !!obj && obj.type === 'planeta';
+    }
+    function updateCaptureFieldsVisibility() {
+      const planet = isPlanetSelected();
+      document.getElementById('deepsky-fields').style.display = planet ? 'none' : 'block';
+      document.getElementById('lucky-fields').style.display = planet ? 'flex' : 'none';
+    }
+    updateCaptureFieldsVisibility();
+    selectObj.addEventListener('change', updateCaptureFieldsVisibility);
+    newTypeSelect.addEventListener('change', updateCaptureFieldsVisibility);
+
     document.getElementById('btn-cancel-upload').addEventListener('click', () => {
       closeModal();
       URL.revokeObjectURL(previewUrl);
@@ -1038,9 +1077,13 @@ window.UI = (function () {
 
     document.getElementById('btn-confirm-upload').addEventListener('click', async () => {
       const isNewObject = selectObj.value === '__new__';
-      const frames = parseFloat(framesInput.value || '0');
-      const secondsPerFrame = parseFloat(secondsInput.value || '0');
+      const planetSession = isPlanetSelected();
+      const frames = planetSession ? null : (parseFloat(framesInput.value || '0') || null);
+      const secondsPerFrame = planetSession ? null : (parseFloat(secondsInput.value || '0') || null);
       const exposureSeconds = frames && secondsPerFrame ? frames * secondsPerFrame : null;
+      const videoSeconds = planetSession ? (parseFloat(document.getElementById('field-video-seconds').value || '0') || null) : null;
+      const framesKeptPercent = planetSession ? (parseFloat(document.getElementById('field-frames-kept-pct').value || '0') || null) : null;
+      const framesStacked = planetSession ? (parseInt(document.getElementById('field-frames-stacked').value || '0', 10) || null) : null;
 
       const formData = {
         objectId: isNewObject ? null : selectObj.value,
@@ -1049,8 +1092,12 @@ window.UI = (function () {
         newObjectType: document.getElementById('field-new-type').value,
         captureDate: document.getElementById('field-date').value,
         exposureSeconds,
-        frames: frames || null,
-        secondsPerFrame: secondsPerFrame || null,
+        frames,
+        secondsPerFrame,
+        isLuckyImaging: planetSession,
+        videoSeconds,
+        framesKeptPercent,
+        framesStacked,
         gain: document.getElementById('field-gain').value ? parseInt(document.getElementById('field-gain').value, 10) : null,
         filterUsed: document.getElementById('field-filter').value || null,
         dither: document.getElementById('field-dither').checked,
@@ -1103,17 +1150,34 @@ window.UI = (function () {
             <input type="date" id="edit-field-date" value="${dateValue}" />
           </div>
 
-          <div class="form-field form-field--row">
-            <div>
-              <label>Frames</label>
-              <input type="number" id="edit-field-frames" min="0" step="1" value="${frames}" placeholder="ex: 120" />
+          <div id="edit-deepsky-fields">
+            <div class="form-field form-field--row">
+              <div>
+                <label>Frames</label>
+                <input type="number" id="edit-field-frames" min="0" step="1" value="${frames}" placeholder="ex: 120" />
+              </div>
+              <div>
+                <label>Segundos/frame</label>
+                <input type="number" id="edit-field-spf" min="0" step="1" value="${spf}" placeholder="ex: 10" />
+              </div>
             </div>
-            <div>
-              <label>Segundos/frame</label>
-              <input type="number" id="edit-field-spf" min="0" step="1" value="${spf}" placeholder="ex: 10" />
+            <div class="form-field__computed" id="edit-exposure-computed">= ${formatExposure((frames && spf) ? frames * spf : photo.exposureSeconds || 0)}</div>
+          </div>
+
+          <div id="edit-lucky-fields" class="form-field--row" style="display:none;">
+            <div class="form-field">
+              <label>Duração do vídeo (s)</label>
+              <input type="number" id="edit-field-video-seconds" min="0" step="1" value="${photo.videoSeconds || ''}" placeholder="ex: 60" />
+            </div>
+            <div class="form-field">
+              <label>% frames aproveitados</label>
+              <input type="number" id="edit-field-frames-kept-pct" min="0" max="100" step="1" value="${photo.framesKeptPercent || ''}" placeholder="ex: 30" />
+            </div>
+            <div class="form-field">
+              <label>Frames empilhados</label>
+              <input type="number" id="edit-field-frames-stacked" min="0" step="1" value="${photo.framesStacked || ''}" placeholder="ex: 800" />
             </div>
           </div>
-          <div class="form-field__computed" id="edit-exposure-computed">= ${formatExposure((frames && spf) ? frames * spf : photo.exposureSeconds || 0)}</div>
 
           <div class="form-field">
             <label>Local</label>
@@ -1171,26 +1235,44 @@ window.UI = (function () {
     framesInput.addEventListener('input', updateComputed);
     spfInput.addEventListener('input', updateComputed);
 
+    const editObjSelect = document.getElementById('edit-field-object');
+    function editIsPlanetSelected() {
+      const obj = (objectsList || []).find((o) => o.id === editObjSelect.value);
+      return !!obj && obj.type === 'planeta';
+    }
+    function updateEditFieldsVisibility() {
+      const planet = editIsPlanetSelected();
+      document.getElementById('edit-deepsky-fields').style.display = planet ? 'none' : 'block';
+      document.getElementById('edit-lucky-fields').style.display = planet ? 'flex' : 'none';
+    }
+    updateEditFieldsVisibility();
+    editObjSelect.addEventListener('change', updateEditFieldsVisibility);
+
     document.getElementById('btn-cancel-edit').addEventListener('click', closeModal);
     document.getElementById('edit-photo-overlay').addEventListener('click', e => {
       if (e.target.id === 'edit-photo-overlay') closeModal();
     });
 
     document.getElementById('btn-confirm-edit').addEventListener('click', async () => {
-      const f   = parseFloat(framesInput.value || '0');
-      const spf = parseFloat(spfInput.value || '0');
+      const planetSession = editIsPlanetSelected();
+      const f   = planetSession ? null : (parseFloat(framesInput.value || '0') || null);
+      const spf = planetSession ? null : (parseFloat(spfInput.value || '0') || null);
       const fields = {
-        objectId:        document.getElementById('edit-field-object').value,
-        captureDate:     new Date(document.getElementById('edit-field-date').value).toISOString(),
-        frames:          f || null,
-        secondsPerFrame: spf || null,
-        exposureSeconds: (f && spf) ? f * spf : photo.exposureSeconds,
-        location:        document.getElementById('edit-field-location').value.trim() || null,
-        filterUsed:      document.getElementById('edit-field-filter').value || null,
-        gain:            document.getElementById('edit-field-gain').value ? parseInt(document.getElementById('edit-field-gain').value) : null,
-        captureSoftware: document.getElementById('edit-field-software').value.trim() || null,
-        dither:          document.getElementById('edit-field-dither').checked,
-        notes:           document.getElementById('edit-field-notes').value.trim(),
+        objectId:          document.getElementById('edit-field-object').value,
+        captureDate:       dateInputToISO(document.getElementById('edit-field-date').value),
+        frames:            f,
+        secondsPerFrame:   spf,
+        exposureSeconds:   planetSession ? null : ((f && spf) ? f * spf : photo.exposureSeconds),
+        isLuckyImaging:    planetSession,
+        videoSeconds:      planetSession ? (parseFloat(document.getElementById('edit-field-video-seconds').value || '0') || null) : null,
+        framesKeptPercent: planetSession ? (parseFloat(document.getElementById('edit-field-frames-kept-pct').value || '0') || null) : null,
+        framesStacked:     planetSession ? (parseInt(document.getElementById('edit-field-frames-stacked').value || '0', 10) || null) : null,
+        location:          document.getElementById('edit-field-location').value.trim() || null,
+        filterUsed:        document.getElementById('edit-field-filter').value || null,
+        gain:              document.getElementById('edit-field-gain').value ? parseInt(document.getElementById('edit-field-gain').value) : null,
+        captureSoftware:   document.getElementById('edit-field-software').value.trim() || null,
+        dither:            document.getElementById('edit-field-dither').checked,
+        notes:             document.getElementById('edit-field-notes').value.trim(),
       };
       closeModal();
       await onSubmit(photo.id, fields);
