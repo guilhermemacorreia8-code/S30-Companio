@@ -1343,15 +1343,21 @@ window.UI = (function () {
 
   function openInstagramExport(photo, obj) {
     let format = 'portrait';
+    let layout = 'classico';
 
     modalRoot().innerHTML = `
       <div class="modal-overlay" id="ig-export-overlay">
         <div class="modal" style="max-width:420px;">
           <h2 class="modal__title">Exportar pro Instagram</h2>
-          <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <div style="display:flex; gap:8px; margin-bottom:10px;">
             <button class="btn-secondary ig-format-btn" data-format="square" style="flex:1;">1:1</button>
             <button class="btn-secondary ig-format-btn" data-format="portrait" style="flex:1;">4:5</button>
             <button class="btn-secondary ig-format-btn" data-format="story" style="flex:1;">9:16</button>
+          </div>
+          <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <button class="btn-secondary ig-layout-btn" data-layout="classico" style="flex:1;">Clássico</button>
+            <button class="btn-secondary ig-layout-btn" data-layout="polaroid" style="flex:1;">Polaroid</button>
+            <button class="btn-secondary ig-layout-btn" data-layout="telemetria" style="flex:1;">Telemetria</button>
           </div>
           <canvas id="ig-preview-canvas" style="width:100%; border-radius:8px; display:block;"></canvas>
           <div class="modal__actions">
@@ -1366,27 +1372,45 @@ window.UI = (function () {
     const img = new Image();
     img.src = photo.objectUrl;
 
-    function draw() {
-      const { w, h } = IG_FORMATS[format];
-      canvas.width = w;
-      canvas.height = h;
-
-      ctx.fillStyle = '#0b0e14';
-      ctx.fillRect(0, 0, w, h);
-
+    function commonData() {
       const moon = window.Moon.phaseForDate(new Date(photo.captureDate));
-      const statsLine1 = photo.frames
-        ? `${photo.frames} frames × ${photo.secondsPerFrame}s = ${formatExposure(photo.exposureSeconds)}`
-        : (photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : null);
-      const statsLine2 = [photo.location || null, `🌙 ${moon.illumination}% (${moon.phaseName})`].filter(Boolean).join('   ·   ');
+      return {
+        statsLine1: photo.frames
+          ? `${photo.frames} frames × ${photo.secondsPerFrame}s = ${formatExposure(photo.exposureSeconds)}`
+          : (photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : null),
+        statsLine2: [photo.location || null, `🌙 ${moon.illumination}% (${moon.phaseName})`].filter(Boolean).join('   ·   '),
+      };
+    }
 
-      // watermark topo (sempre no mesmo lugar, fora da área da foto)
+    function drawWatermark(w, h) {
       ctx.fillStyle = '#e8eaed';
       ctx.font = `600 ${Math.round(w * 0.034)}px Arial`;
       ctx.fillText('◎ S30 Cosmic Companion', w * 0.05, h * 0.045);
+    }
 
+    function drawHandleFooter(x, y, maxW, w) {
+      ctx.strokeStyle = 'rgba(139,147,167,0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + maxW, y);
+      ctx.stroke();
+      y += w * 0.045;
+
+      ctx.fillStyle = '#5a6178';
+      ctx.font = `${Math.round(w * 0.022)}px monospace`;
+      ctx.fillText('via SeeStar S30', x, y);
+
+      ctx.fillStyle = '#5ec8d8';
+      ctx.font = `600 ${Math.round(w * 0.024)}px monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(INSTAGRAM_HANDLE, x + maxW, y);
+      ctx.textAlign = 'left';
+    }
+
+    // ---- Layout 1: Clássico — foto full-bleed, texto sobre gradiente ----
+    function drawClassico(w, h, data) {
       if (format === 'story') {
-        // foto emoldurada (contain) — evita corte agressivo de foto paisagem num quadro 9:16
         const frameX = w * 0.06, frameY = h * 0.09;
         const frameW = w * 0.88, frameH = h * 0.48;
         const scale = Math.min(frameW / img.width, frameH / img.height);
@@ -1401,9 +1425,8 @@ window.UI = (function () {
         ctx.drawImage(img, ix, iy, iw, ih);
         ctx.restore();
 
-        drawInfoBlock(w * 0.06, h * 0.62, w * 0.88);
+        drawInfoBlock(w * 0.06, h * 0.62, w * 0.88, w, data);
       } else {
-        // 1:1 e 4:5 — foto cobrindo o quadro inteiro (cover)
         const scale = Math.max(w / img.width, h / img.height);
         const iw = img.width * scale, ih = img.height * scale;
         ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
@@ -1416,49 +1439,152 @@ window.UI = (function () {
         ctx.fillStyle = grad;
         ctx.fillRect(0, h - scrimH, w, scrimH);
 
-        drawInfoBlock(w * 0.05, h - scrimH * 0.78, w * 0.9);
+        drawInfoBlock(w * 0.05, h - scrimH * 0.78, w * 0.9, w, data);
+      }
+    }
+
+    function drawInfoBlock(x, y, maxW, w, data) {
+      ctx.fillStyle = '#e8935a';
+      ctx.font = `600 ${Math.round(w * 0.026)}px monospace`;
+      ctx.fillText(obj.catalog, x, y);
+      y += w * 0.055;
+
+      ctx.fillStyle = '#e8eaed';
+      ctx.font = `700 ${Math.round(w * 0.058)}px Arial`;
+      ctx.fillText(obj.commonName, x, y);
+      y += w * 0.07;
+
+      if (data.statsLine1) {
+        ctx.fillStyle = '#c7cbd6';
+        ctx.font = `${Math.round(w * 0.026)}px monospace`;
+        ctx.fillText(data.statsLine1, x, y);
+        y += w * 0.042;
       }
 
-      function drawInfoBlock(x, y, maxW) {
-        ctx.fillStyle = '#e8935a';
-        ctx.font = `600 ${Math.round(w * 0.026)}px monospace`;
-        ctx.fillText(obj.catalog, x, y);
-        y += w * 0.055;
+      ctx.fillStyle = '#8b93a7';
+      ctx.font = `${Math.round(w * 0.026)}px monospace`;
+      ctx.fillText(data.statsLine2, x, y);
+      y += w * 0.06;
 
-        ctx.fillStyle = '#e8eaed';
-        ctx.font = `700 ${Math.round(w * 0.058)}px Arial`;
-        ctx.fillText(obj.commonName, x, y);
-        y += w * 0.07;
+      drawHandleFooter(x, y, maxW, w);
+    }
 
-        if (statsLine1) {
-          ctx.fillStyle = '#c7cbd6';
-          ctx.font = `${Math.round(w * 0.026)}px monospace`;
-          ctx.fillText(statsLine1, x, y);
-          y += w * 0.042;
-        }
+    // ---- Layout 2: Polaroid — foto emoldurada com respiro, legenda abaixo ----
+    function drawPolaroid(w, h, data) {
+      ctx.fillStyle = '#131826';
+      ctx.fillRect(0, 0, w, h);
+      drawWatermark(w, h);
 
-        ctx.fillStyle = '#8b93a7';
-        ctx.font = `${Math.round(w * 0.026)}px monospace`;
-        ctx.fillText(statsLine2, x, y);
-        y += w * 0.06;
+      const pad = w * 0.06;
+      const frameY = h * 0.11;
+      const frameH = h * 0.52;
+      const frameW = w - pad * 2;
+      const scale = Math.max(frameW / img.width, frameH / img.height);
+      const iw = img.width * scale, ih = img.height * scale;
 
-        ctx.strokeStyle = 'rgba(139,147,167,0.25)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + maxW, y);
-        ctx.stroke();
-        y += w * 0.045;
+      ctx.save();
+      roundRect(ctx, pad, frameY, frameW, frameH, w * 0.015);
+      ctx.clip();
+      ctx.drawImage(img, pad - (iw - frameW) / 2, frameY - (ih - frameH) / 2, iw, ih);
+      ctx.restore();
 
+      let y = frameY + frameH + w * 0.08;
+      ctx.fillStyle = '#e8935a';
+      ctx.font = `600 ${Math.round(w * 0.024)}px monospace`;
+      ctx.fillText(obj.catalog, pad, y);
+      y += w * 0.05;
+
+      ctx.fillStyle = '#e8eaed';
+      ctx.font = `700 ${Math.round(w * 0.05)}px Arial`;
+      ctx.fillText(obj.commonName, pad, y);
+      y += w * 0.045;
+
+      ctx.fillStyle = '#8b93a7';
+      ctx.font = `${Math.round(w * 0.022)}px monospace`;
+      ctx.fillText([data.statsLine1, photo.location].filter(Boolean).join(' · '), pad, y);
+      y += w * 0.055;
+
+      drawHandleFooter(pad, y, w - pad * 2, w);
+    }
+
+    // ---- Layout 3: Telemetria — foto contida no topo, painel de dados tipo ficha técnica ----
+    function drawTelemetria(w, h, data) {
+      ctx.fillStyle = '#0b0e14';
+      ctx.fillRect(0, 0, w, h);
+      drawWatermark(w, h);
+
+      const pad = w * 0.06;
+      const frameY = h * 0.09;
+      const frameH = h * 0.34;
+      const frameW = w - pad * 2;
+      const scale = Math.min(frameW / img.width, frameH / img.height);
+      const iw = img.width * scale, ih = img.height * scale;
+
+      ctx.save();
+      roundRect(ctx, pad, frameY, frameW, frameH, w * 0.015);
+      ctx.clip();
+      ctx.fillStyle = '#131826';
+      ctx.fillRect(pad, frameY, frameW, frameH);
+      ctx.drawImage(img, pad + (frameW - iw) / 2, frameY + (frameH - ih) / 2, iw, ih);
+      ctx.restore();
+
+      let y = frameY + frameH + w * 0.07;
+      ctx.fillStyle = '#e8eaed';
+      ctx.font = `700 ${Math.round(w * 0.05)}px Arial`;
+      ctx.fillText(obj.commonName, pad, y);
+      y += w * 0.035;
+      ctx.fillStyle = '#e8935a';
+      ctx.font = `${Math.round(w * 0.022)}px monospace`;
+      ctx.fillText(obj.catalog, pad, y);
+      y += w * 0.05;
+
+      const moon = window.Moon.phaseForDate(new Date(photo.captureDate));
+      const grid = [
+        ['EXPOSIÇÃO', photo.exposureSeconds ? formatExposure(photo.exposureSeconds) : '—'],
+        ['FRAMES', photo.frames ? `${photo.frames} × ${photo.secondsPerFrame}s` : '—'],
+        ['LOCAL', photo.location || '—'],
+        ['LUA', `${moon.illumination}%`],
+      ];
+      const gridW = w - pad * 2, gridH = h * 0.17, colW = gridW / 2;
+      ctx.fillStyle = '#131826';
+      roundRect(ctx, pad, y, gridW, gridH, w * 0.015);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(139,147,167,0.16)';
+      roundRect(ctx, pad, y, gridW, gridH, w * 0.015);
+      ctx.stroke();
+
+      grid.forEach(([label, value], i) => {
+        const col = i % 2, row = Math.floor(i / 2);
+        const cx = pad + w * 0.03 + col * colW;
+        const cy = y + gridH * 0.32 + row * gridH * 0.48;
         ctx.fillStyle = '#5a6178';
-        ctx.font = `${Math.round(w * 0.022)}px monospace`;
-        ctx.fillText('via SeeStar S30', x, y);
+        ctx.font = `${Math.round(w * 0.015)}px monospace`;
+        ctx.fillText(label, cx, cy);
+        ctx.fillStyle = '#e8eaed';
+        ctx.font = `600 ${Math.round(w * 0.021)}px monospace`;
+        ctx.fillText(value, cx, cy + w * 0.032);
+      });
 
-        ctx.fillStyle = '#5ec8d8';
-        ctx.font = `600 ${Math.round(w * 0.024)}px monospace`;
-        ctx.textAlign = 'right';
-        ctx.fillText(INSTAGRAM_HANDLE, x + maxW, y);
-        ctx.textAlign = 'left';
+      ctx.fillStyle = '#5ec8d8';
+      ctx.font = `600 ${Math.round(w * 0.022)}px monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(INSTAGRAM_HANDLE, w - pad, h - pad * 0.6);
+      ctx.textAlign = 'left';
+    }
+
+    function draw() {
+      const { w, h } = IG_FORMATS[format];
+      canvas.width = w;
+      canvas.height = h;
+      const data = commonData();
+
+      if (layout === 'polaroid') drawPolaroid(w, h, data);
+      else if (layout === 'telemetria') drawTelemetria(w, h, data);
+      else {
+        ctx.fillStyle = '#0b0e14';
+        ctx.fillRect(0, 0, w, h);
+        drawWatermark(w, h);
+        drawClassico(w, h, data);
       }
     }
 
@@ -1480,6 +1606,12 @@ window.UI = (function () {
         draw();
       });
     });
+    document.querySelectorAll('.ig-layout-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        layout = btn.dataset.layout;
+        draw();
+      });
+    });
 
     document.getElementById('btn-cancel-ig').addEventListener('click', closeModal);
     document.getElementById('ig-export-overlay').addEventListener('click', (e) => {
@@ -1490,7 +1622,7 @@ window.UI = (function () {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${obj.id}_${IG_FORMATS[format].label.replace(':', 'x')}.png`;
+        a.download = `${obj.id}_${layout}_${IG_FORMATS[format].label.replace(':', 'x')}.png`;
         document.body.appendChild(a);
         a.click();
         a.remove();
