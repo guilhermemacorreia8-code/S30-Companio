@@ -1169,20 +1169,66 @@ a { color: var(--accent-ion); text-decoration: none; }
   margin-bottom: 6px;
 }
 
-.lightbox-caption__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.lightbox-caption__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.lightbox-caption__top .lightbox-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lightbox-analyze,
+.lightbox-share,
+.lightbox-add-detail,
+.lightbox-download,
 .lightbox-edit {
   flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 6px 12px;
-  border-radius: var(--radius-chip);
-  border: 1px solid var(--border-hairline-strong);
-  background: rgba(255,255,255,0.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hairline);
+  background: var(--bg-panel);
   color: var(--ink-dim);
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color .15s, color .15s;
 }
-.lightbox-edit:hover { color: var(--accent-ion); border-color: var(--accent-ion); }
+.lightbox-analyze:hover,
+.lightbox-share:hover,
+.lightbox-add-detail:hover,
+.lightbox-download:hover {
+  color: var(--accent-ion);
+  border-color: var(--accent-ion);
+}
+.lightbox-edit {
+  background: var(--accent-copper-dim);
+  border-color: rgba(232,147,90,0.4);
+  color: var(--accent-copper);
+  font-weight: 600;
+}
+.lightbox-edit:hover { border-color: var(--accent-copper); }
+
+.lightbox-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hairline);
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.lightbox-delete:hover {
+  background: rgba(220,90,90,0.12);
+  border-color: rgba(220,90,90,0.4);
+  color: #e07070;
+}
 
 /* auth widget */
 .auth-widget {
