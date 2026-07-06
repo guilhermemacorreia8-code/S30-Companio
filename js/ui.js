@@ -712,7 +712,7 @@ window.UI = (function () {
 
     function render() {
       const p = photos[current];
-      if (!p.objectUrl && p.blob) p.objectUrl = URL.createObjectURL(p.blob);
+      if (!p.objectUrl && p.blob instanceof Blob) p.objectUrl = URL.createObjectURL(p.blob);
       const moon = window.Moon.phaseForDate(new Date(p.captureDate));
       const techBits = [
         p.filterUsed ? { duoband: 'Duo-band', broadband: 'Broadband', lp: 'Filtro LP', outro: 'Filtro outro' }[p.filterUsed] || p.filterUsed : null,
@@ -789,14 +789,14 @@ window.UI = (function () {
       if (p.objectUrl) {
         document.getElementById('lightbox-download').addEventListener('click', (e) => {
           e.stopPropagation();
-          const downloadUrl = p.originalBlob ? URL.createObjectURL(p.originalBlob) : p.objectUrl;
+          const downloadUrl = (p.originalBlob instanceof Blob) ? URL.createObjectURL(p.originalBlob) : p.objectUrl;
           const a = document.createElement('a');
           a.href = downloadUrl;
           a.download = p.fileName || `${p.objectId || 'foto'}.jpg`;
           document.body.appendChild(a);
           a.click();
           a.remove();
-          if (p.originalBlob) URL.revokeObjectURL(downloadUrl);
+          if (p.originalBlob instanceof Blob) URL.revokeObjectURL(downloadUrl);
         });
       }
       document.getElementById('lightbox-delete').addEventListener('click', function (e) {

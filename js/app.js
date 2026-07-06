@@ -190,7 +190,9 @@ python3 -m http.server 8000</pre>
         // grid/timeline usa só a miniatura leve; a foto em resolução plena
         // (objectUrl) é criada sob demanda ao abrir o lightbox, não aqui —
         // evita manter na memória o blob inteiro de toda foto o tempo todo.
-        p.thumbUrl = p.thumbBlob ? URL.createObjectURL(p.thumbBlob) : (p.blob ? URL.createObjectURL(p.blob) : null);
+        const thumb = p.thumbBlob instanceof Blob ? p.thumbBlob : null;
+        const full = p.blob instanceof Blob ? p.blob : null;
+        p.thumbUrl = thumb ? URL.createObjectURL(thumb) : (full ? URL.createObjectURL(full) : null);
         p.objectUrl = null;
         if (!photosByObject[p.objectId]) photosByObject[p.objectId] = [];
         photosByObject[p.objectId].push(p);

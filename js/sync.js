@@ -56,7 +56,7 @@ window.Sync = (function () {
       if (error) throw error;
     }
     const meta = Object.assign({}, localPhoto);
-    delete meta.blob; delete meta.objectUrl;
+    delete meta.blob; delete meta.objectUrl; delete meta.thumbBlob; delete meta.thumbUrl; delete meta.originalBlob;
 
     if (localPhoto.remoteId) {
       await client().from('photos').update({
