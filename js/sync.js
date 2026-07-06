@@ -12,12 +12,15 @@ window.Sync = (function () {
   }
 // captura token do redirect OAuth
   if (window.location.hash.includes('access_token')) {
-    setTimeout(function() { client().auth.getSession(); }, 500);
-  }
+  setTimeout(function() {
+    client().auth.getSession();
+    history.replaceState(null, '', window.location.pathname);
+  }, 500);
+}
   async function signInWithGoogle() {
     const { error } = await client().auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.origin + window.location.pathname },
     });
     if (error) throw error;
   }
