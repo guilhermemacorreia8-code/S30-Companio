@@ -869,9 +869,9 @@ window.UI = (function () {
           ${photos.length > 1 ? '<button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" aria-label="Anterior">‹</button>' : ''}
           <div class="lightbox-content">
             ${p.objectUrl
-              ? `<div class="lightbox-zoom-row">
-                   <img class="lightbox-zoom-src" id="lightbox-zoom-src" src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />
-                   <div class="lightbox-zoom-out" id="lightbox-zoom-out" style="background-image:url('${p.objectUrl}');"></div>
+              ? `<div class="lightbox-lens-wrap" id="lightbox-lens-wrap">
+                   <img class="lightbox-lens-img" id="lightbox-lens-img" src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />
+                   <div class="lightbox-lens" id="lightbox-lens" style="background-image:url('${p.objectUrl}');"></div>
                  </div>`
               : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
             <div class="lightbox-caption">
@@ -920,15 +920,22 @@ window.UI = (function () {
         });
       }
       if (p.objectUrl) {
-        const zoomSrc = document.getElementById('lightbox-zoom-src');
-        const zoomOut = document.getElementById('lightbox-zoom-out');
-        if (zoomSrc && zoomOut) {
-          zoomSrc.addEventListener('mousemove', (e) => {
-            const r = zoomSrc.getBoundingClientRect();
-            const x = ((e.clientX - r.left) / r.width) * 100;
-            const y = ((e.clientY - r.top) / r.height) * 100;
-            zoomOut.style.backgroundPosition = `${x}% ${y}%`;
+        const lensWrap = document.getElementById('lightbox-lens-wrap');
+        const lens = document.getElementById('lightbox-lens');
+        const lensSize = 160;
+        const zoom = 2.5;
+        if (lensWrap && lens) {
+          lensWrap.addEventListener('mousemove', (e) => {
+            const r = lensWrap.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            lens.style.left = `${x - lensSize / 2}px`;
+            lens.style.top = `${y - lensSize / 2}px`;
+            lens.style.backgroundSize = `${r.width * zoom}px ${r.height * zoom}px`;
+            lens.style.backgroundPosition = `${-(x * zoom - lensSize / 2)}px ${-(y * zoom - lensSize / 2)}px`;
+            lens.style.display = 'block';
           });
+          lensWrap.addEventListener('mouseleave', () => { lens.style.display = 'none'; });
         }
       }
       if (p.objectUrl) {
