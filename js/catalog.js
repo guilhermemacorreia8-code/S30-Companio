@@ -90,5 +90,13 @@ window.Catalog = (function () {
     });
   }
 
-  return { SEED, seedIfEmpty, findById, createCustomObject, getExposureTarget };
+  // FOV real medido: 150mm, sensor IMX662 1920×1080, ~3.99"/px
+  const S30_FOV_ARCMIN = { width: 127.60, height: 71.78 };
+
+  function getFovFillPercent(sizeArcmin) {
+    if (!sizeArcmin) return null;
+    return Math.round((sizeArcmin / S30_FOV_ARCMIN.height) * 100);
+  }
+
+  return { SEED, seedIfEmpty, findById, createCustomObject, getExposureTarget, S30_FOV_ARCMIN, getFovFillPercent };
 })();

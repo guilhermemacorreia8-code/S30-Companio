@@ -321,6 +321,61 @@ window.UI = (function () {
 
   // ---------- Dashboard anual ----------
 
+  function parseRAtoHours(raStr) {
+    if (!raStr || raStr === '—') return null;
+    const m = raStr.match(/(\d+)h(\d+)m(\d+)s/);
+    if (!m) return null;
+    return Number(m[1]) + Number(m[2]) / 60 + Number(m[3]) / 3600;
+  }
+
+  function parseDecToDeg(decStr) {
+    if (!decStr || decStr === '—') return null;
+    const m = decStr.match(/([+-])(\d+)°(\d+)′(\d+)″/);
+    if (!m) return null;
+    const sign = m[1] === '-' ? -1 : 1;
+    return sign * (Number(m[2]) + Number(m[3]) / 60 + Number(m[4]) / 3600);
+  }
+
+  function renderSkymap(objects, photosByObject) {
+    const points = objects.map((obj) => {
+      const ra = parseRAtoHours(obj.ra);
+      const dec = parseDecToDeg(obj.dec);
+      if (ra == null || dec == null) return null;
+
+      const photos = (photosByObject[obj.id] || []).filter((p) => !p.isDetail);
+      let colorClass = 'skymap-dot--none';
+      if (photos.length) {
+        colorClass = 'skymap-dot--done';
+      } else if (obj.constellation && obj.constellation !== '—') {
+        const season = window.SkySeason.constellationSeasonStatus(obj.constellation, new Date(), null, 20);
+        if (season.status === 'prime' || season.status === 'ok') colorClass = 'skymap-dot--season';
+      }
+
+      const x = (ra / 24) * 100;
+      const y = ((90 - dec) / 180) * 100;
+      return { obj, x, y, colorClass, photosCount: photos.length };
+    }).filter(Boolean);
+
+    root().innerHTML = `
+      <div class="detail-view">
+        <button class="detail-back" id="btn-back">← Voltar ao catálogo</button>
+        <h1 class="detail-title__name" style="margin-bottom:6px;">🗺️ Mapa do céu</h1>
+        <div style="display:flex; gap:14px; font-family:var(--font-mono); font-size:11px; color:var(--ink-dim); margin-bottom:16px;">
+          <span style="color:#6bcf9a;">● fotografado</span>
+          <span style="color:var(--accent-copper);">● em época agora</span>
+          <span style="color:var(--ink-faint);">● fora de época</span>
+        </div>
+        <div class="skymap">
+          <div class="skymap__axis-h"></div>
+          <div class="skymap__axis-v"></div>
+          ${points.map((p) => `
+            <button class="skymap-dot ${p.colorClass}" style="left:${p.x}%; top:${p.y}%;" data-object-id="${escapeHtml(p.obj.id)}" title="${escapeHtml(p.obj.commonName)}"></button>
+          `).join('')}
+        </div>
+        <div class="skymap__note">eixo horizontal = ascensão reta (RA) · eixo vertical = declinação (Dec) · ${points.length} de ${objects.length} objetos com coordenadas conhecidas</div>
+      </div>`;
+  }
+
   function renderLandscapeGallery(objects, photosByObject) {
     root().innerHTML = `
       <div class="detail-view">
@@ -497,7 +552,7 @@ window.UI = (function () {
 
   // ---------- Detalhe do objeto + comparação ----------
 
-  function renderObjectDetail(obj, photos, handlers) {
+  function renderObjectDetail(obj, photos, handlers, allObjects) {
     handlers = handlers || {};
     const mainPhotos = photos.filter((p) => !p.isDetail);
     const detailsByParent = {};
@@ -581,6 +636,9 @@ window.UI = (function () {
           </div>
         </div>
 
+        ${!isSolarSystemBody && !isLandscape ? renderFovAndAtlasRow(obj) : ''}
+        ${!isSolarSystemBody && !isLandscape ? renderContextPanel(obj, mainPhotos, allObjects || []) : ''}
+
         ${mainPhotos.length >= 2 ? renderComparePanel(mainPhotos) : ''}
         ${!isSolarSystemBody && !isLandscape ? renderSignalPanel(mainPhotos) : ''}
 
@@ -605,6 +663,90 @@ window.UI = (function () {
 
     if (mainPhotos.length >= 2) wireCompare(mainPhotos);
     wireTimeline(mainPhotos, handlers.onSetCover, handlers.onEdit, handlers.onDelete, handlers.onAddDetail, detailsByParent, obj, handlers.onAnalyze);
+  }
+
+  function getAtlasMatchFor(obj) {
+    try {
+      const raw = localStorage.getItem('s30-atlas-last-import');
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      const key = window.Atlas.normalizeCatalogId(obj.catalog || obj.id);
+      const t = (data.targets || []).find((x) => x.catalogId === key);
+      return t ? { ...t, importedAt: data.importedAt } : null;
+    } catch (e) { return null; }
+  }
+
+  function renderAtlasBar(label, valueText, pct) {
+    return `
+      <div class="atlas-bar">
+        <div class="atlas-bar__row"><span>${label}</span><span>${valueText}</span></div>
+        <div class="atlas-bar__track"><div class="atlas-bar__fill" style="width:${Math.max(2, Math.min(100, pct))}%;"></div></div>
+      </div>`;
+  }
+
+  function renderFovAndAtlasRow(obj) {
+    const fill = window.Catalog.getFovFillPercent(obj.sizeArcmin);
+    const match = getAtlasMatchFor(obj);
+    if (fill == null && !match) return '';
+
+    const fovHtml = fill == null ? '' : `
+      <div class="fov-card">
+        <div class="fov-card__label">CAMPO DE VISÃO · S30 · 150mm</div>
+        <div class="fov-frame">
+          <div class="fov-frame__reticle"></div>
+          <div class="fov-frame__object" style="width:${Math.max(6, Math.min(92, fill))}%; height:${Math.max(6, Math.min(92, fill))}%;"></div>
+        </div>
+        <div class="fov-card__caption">Preenche <strong>~${fill}%</strong> do quadro</div>
+      </div>`;
+
+    const atlasHtml = !match ? '' : `
+      <div class="fov-card">
+        <div class="fov-card__label">DO ÚLTIMO IMPORT ATLAS · ${formatDate(match.importedAt)}</div>
+        ${renderAtlasBar('Altitude/score', `${Math.round(match.score)}%`, match.score)}
+        ${match.durationHours ? renderAtlasBar('Janela de captura', `${match.durationHours.toFixed(1)}h`, Math.min(100, match.durationHours * 12)) : ''}
+      </div>`;
+
+    return `
+      <div class="panel">
+        <div class="panel__title">Simulação de enquadramento</div>
+        <div class="fov-row">${fovHtml}${atlasHtml}</div>
+      </div>`;
+  }
+
+  function renderContextPanel(obj, photos, allObjects) {
+    const season = obj.constellation && obj.constellation !== '—'
+      ? window.SkySeason.constellationSeasonStatus(obj.constellation, new Date(), null, 20)
+      : { status: 'unknown' };
+    const seasonMap = {
+      prime: ['Em época — culmina perto da meia-noite', 'good'],
+      ok: ['Em época — visível parte da noite', 'mid'],
+      low: ['Baixo no horizonte', 'low'],
+      none: ['Fora de época', 'low'],
+    };
+    const seasonBadge = seasonMap[season.status] || null;
+
+    const lastPhoto = photos[photos.length - 1];
+    const daysSince = lastPhoto ? Math.round((Date.now() - new Date(lastPhoto.captureDate).getTime()) / 86400000) : null;
+
+    const neighbors = (allObjects || []).filter((o) =>
+      o.id !== obj.id && o.constellation === obj.constellation && o.constellation && o.constellation !== '—'
+    );
+
+    const meaning = window.ConstellationData.get(obj.constellation);
+
+    if (!seasonBadge && !photos.length && !neighbors.length && !meaning) return '';
+
+    return `
+      <div class="panel">
+        <div class="panel__title">Contexto do alvo</div>
+        ${seasonBadge ? `<span class="season-badge season-badge--${seasonBadge[1]}">● ${escapeHtml(seasonBadge[0])}</span>` : ''}
+        ${photos.length ? `<div class="context-history">Você já fotografou este alvo <strong>${photos.length}×</strong>${daysSince != null ? ` · última vez há <strong>${daysSince} dia(s)</strong>` : ''}</div>` : ''}
+        ${neighbors.length ? `
+          <div class="context-neighbors__label">TAMBÉM EM ${escapeHtml((obj.constellation || '').toUpperCase())}</div>
+          <div class="context-neighbors">${neighbors.map((n) => `<button class="context-neighbor" data-object-id="${escapeHtml(n.id)}">${escapeHtml(n.catalog)}${n.commonName ? ' · ' + escapeHtml(n.commonName) : ''}</button>`).join('')}</div>
+        ` : ''}
+        ${meaning ? `<div class="context-meaning">${escapeHtml(meaning.meaning)}</div>` : ''}
+      </div>`;
   }
 
   function renderSignalPanel(photos) {
@@ -727,7 +869,10 @@ window.UI = (function () {
           ${photos.length > 1 ? '<button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" aria-label="Anterior">‹</button>' : ''}
           <div class="lightbox-content">
             ${p.objectUrl
-              ? `<img src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />`
+              ? `<div class="lightbox-zoom-row">
+                   <img class="lightbox-zoom-src" id="lightbox-zoom-src" src="${p.objectUrl}" alt="${formatDate(p.captureDate)}" />
+                   <div class="lightbox-zoom-out" id="lightbox-zoom-out" style="background-image:url('${p.objectUrl}');"></div>
+                 </div>`
               : `<div class="lightbox-placeholder">Sessão sem foto registrada</div>`}
             <div class="lightbox-caption">
               <div class="lightbox-caption__top">
@@ -743,8 +888,8 @@ window.UI = (function () {
                   ${techBits ? `<div class="lightbox-caption__meta">${escapeHtml(techBits)}</div>` : ''}
                   ${p.notes ? `<div class="lightbox-caption__notes">${escapeHtml(p.notes)}</div>` : ''}
                 </div>
-                <div class="lightbox-actions">${p.objectUrl && !p.isDetail && !p.isLuckyImaging && (!obj || obj.type !== 'paisagem') ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button></div>
               </div>
+              <div class="lightbox-actions">${p.objectUrl && !p.isDetail && !p.isLuckyImaging && (!obj || obj.type !== 'paisagem') ? `<button class="lightbox-analyze" id="lightbox-analyze" title="Analisar ruído/sinal">🔬 Analisar</button>` : ''}${p.objectUrl ? `<button class="lightbox-share" id="lightbox-share" title="Exportar pro Instagram">📤 Compartilhar</button>` : ''}${p.objectUrl && !p.isDetail ? `<button class="lightbox-add-detail" id="lightbox-add-detail" title="Adicionar detalhe desta foto">🔍 Detalhe</button>` : ''}${p.objectUrl ? `<button class="lightbox-download" id="lightbox-download" title="Baixar foto">⬇ Baixar</button>` : ''}<button class="lightbox-edit" id="lightbox-edit" title="Editar metadados">✏ Editar</button><button class="lightbox-delete" id="lightbox-delete" title="Deletar esta foto">🗑</button></div>
             </div>
           </div>
           ${photos.length > 1 ? '<button class="lightbox-nav lightbox-nav--next" id="lightbox-next" aria-label="Próxima">›</button>' : ''}
@@ -773,6 +918,18 @@ window.UI = (function () {
             btn.textContent = '🔬 Analisar';
           }
         });
+      }
+      if (p.objectUrl) {
+        const zoomSrc = document.getElementById('lightbox-zoom-src');
+        const zoomOut = document.getElementById('lightbox-zoom-out');
+        if (zoomSrc && zoomOut) {
+          zoomSrc.addEventListener('mousemove', (e) => {
+            const r = zoomSrc.getBoundingClientRect();
+            const x = ((e.clientX - r.left) / r.width) * 100;
+            const y = ((e.clientY - r.top) / r.height) * 100;
+            zoomOut.style.backgroundPosition = `${x}% ${y}%`;
+          });
+        }
       }
       if (p.objectUrl) {
         document.getElementById('lightbox-share').addEventListener('click', (e) => {
@@ -1888,6 +2045,7 @@ window.UI = (function () {
     wireCoveragePanel,
     renderYearlyDashboard,
     renderLandscapeGallery,
+    renderSkymap,
     openUploadForm,
     openDetailUploadForm,
     openEditPhotoForm,

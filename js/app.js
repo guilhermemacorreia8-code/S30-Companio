@@ -206,6 +206,7 @@ python3 -m http.server 8000</pre>
     if (hash === '#/coverage') { renderCoverageView(); return; }
     if (hash === '#/dashboard') { renderDashboardView(); return; }
     if (hash === '#/landscapes') { renderLandscapesView(); return; }
+    if (hash === '#/skymap') { renderSkymapView(); return; }
     const match = hash.match(/^#\/object\/(.+)$/);
     if (match) {
       renderObjectView(decodeURIComponent(match[1]));
@@ -219,6 +220,15 @@ python3 -m http.server 8000</pre>
     window.UI.renderLandscapeGallery(landscapeObjects, photosByObject);
     document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });
     document.querySelectorAll('.landscape-card').forEach((el) => {
+      el.addEventListener('click', () => { location.hash = `#/object/${encodeURIComponent(el.dataset.objectId)}`; });
+    });
+  }
+
+  function renderSkymapView() {
+    const deepSkyObjects = allObjects.filter((o) => o.type !== 'planeta' && o.type !== 'paisagem');
+    window.UI.renderSkymap(deepSkyObjects, photosByObject);
+    document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });
+    document.querySelectorAll('.skymap-dot').forEach((el) => {
       el.addEventListener('click', () => { location.hash = `#/object/${encodeURIComponent(el.dataset.objectId)}`; });
     });
   }
@@ -379,6 +389,10 @@ python3 -m http.server 8000</pre>
         await refreshData();
         route();
       },
+    }, allObjects);
+
+    document.querySelectorAll('.context-neighbor').forEach((el) => {
+      el.addEventListener('click', () => { location.hash = `#/object/${encodeURIComponent(el.dataset.objectId)}`; });
     });
 
     document.getElementById('btn-back').addEventListener('click', () => { location.hash = '#/'; });
@@ -462,6 +476,7 @@ python3 -m http.server 8000</pre>
     document.getElementById('btn-view-coverage').addEventListener('click', () => { location.hash = '#/coverage'; });
     document.getElementById('btn-view-dashboard').addEventListener('click', () => { location.hash = '#/dashboard'; });
     document.getElementById('btn-view-landscapes').addEventListener('click', () => { location.hash = '#/landscapes'; });
+    document.getElementById('btn-view-skymap').addEventListener('click', () => { location.hash = '#/skymap'; });
 
     document.getElementById('btn-backup').addEventListener('click', handleBackup);
 
@@ -623,6 +638,16 @@ python3 -m http.server 8000</pre>
     }
 
     const targets = window.Atlas.parseExport(raw).filter((t) => t.score >= ATLAS_SCORE_FLOOR);
+    localStorage.setItem('s30-atlas-last-import', JSON.stringify({
+      importedAt: new Date().toISOString(),
+      targets: targets.map((t) => ({
+        catalogId: t.catalogId,
+        score: t.score,
+        label: t.label,
+        bestTime: t.bestTime ? t.bestTime.toISOString() : null,
+        durationHours: t.durationHours,
+      })),
+    }));
     const matches = window.Atlas.matchAgainstCatalog(targets, allObjects);
 
     const ranked = matches
