@@ -60,16 +60,7 @@ window.App = (function () {
     renderAuthWidget();
     window.Sync.onAuthChange(async (session) => {
       renderAuthWidget();
-      if (session) {
-        try {
-          await window.Sync.fullSync((msg) => updateSyncStatus(msg));
-          await refreshData();
-          route();
-          updateSyncStatus('Sincronizado ✓');
-        } catch (e) {
-          updateSyncStatus('Erro no sync: ' + e.message);
-        }
-      }
+      if (session) await triggerManualSync();
     });
   }
 
@@ -106,7 +97,11 @@ window.App = (function () {
     if (el) el.textContent = msg;
   }
 
+  let syncInProgress = false;
+
   async function triggerManualSync() {
+    if (syncInProgress) return;
+    syncInProgress = true;
     updateSyncStatus('Enviando...');
     try {
       await window.Sync.pushAll((msg) => updateSyncStatus(msg));
@@ -116,6 +111,8 @@ window.App = (function () {
       updateSyncStatus('Sincronizado ✓');
     } catch (e) {
       updateSyncStatus('Erro: ' + e.message);
+    } finally {
+      syncInProgress = false;
     }
   }
 
