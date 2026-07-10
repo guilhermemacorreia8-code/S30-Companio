@@ -62,11 +62,23 @@ window.Sync = (function () {
     delete meta.blob; delete meta.objectUrl; delete meta.thumbBlob; delete meta.thumbUrl; delete meta.originalBlob;
 
     if (localPhoto.remoteId) {
-      await client().from('photos').update({
+      const { data: updated, error } = await client().from('photos').update({
         storage_path: storagePath,
         data: Object.assign({}, meta, { storagePath: storagePath }),
         updated_at: new Date().toISOString(),
-      }).eq('id', localPhoto.remoteId);
+      }).eq('id', localPhoto.remoteId).select('id');
+      if (error) throw error;
+      if (!updated || !updated.length) {
+        // remoteId órfão (linha não existe mais na nuvem, ex: depois de um wipe) — insere de novo
+        const { data: inserted, error: insError } = await client().from('photos').insert({
+          user_id: uid,
+          object_id: localPhoto.objectId,
+          storage_path: storagePath,
+          data: Object.assign({}, meta, { storagePath: storagePath }),
+        }).select('id').single();
+        if (insError) throw insError;
+        await window.DB.updatePhoto(localPhoto.id, { remoteId: inserted.id });
+      }
     } else {
       const { data: inserted, error } = await client().from('photos').insert({
         user_id: uid,
@@ -153,6 +165,32 @@ window.Sync = (function () {
     return { objects: (objs || []).length, newPhotos: n };
   }
 
+  const BACKUP_RETENTION = 7;
+  const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+  async function autoBackupIfDue() {
+    const session = await getSession();
+    if (!session) return;
+    const uid = session.user.id;
+    const lastRun = Number(localStorage.getItem('s30-last-auto-backup') || 0);
+    if (Date.now() - lastRun < BACKUP_INTERVAL_MS) return;
+
+    const data = await window.DB.exportAll();
+    const path = `${uid}/backups/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const { error } = await client().storage.from('photos').upload(path, blob);
+    if (error) { console.warn('[Sync] Backup automático falhou:', error); return; }
+
+    localStorage.setItem('s30-last-auto-backup', String(Date.now()));
+
+    const { data: list } = await client().storage.from('photos').list(`${uid}/backups`);
+    if (list && list.length > BACKUP_RETENTION) {
+      const sorted = list.sort((a, b) => a.name.localeCompare(b.name));
+      const toDelete = sorted.slice(0, sorted.length - BACKUP_RETENTION).map((f) => `${uid}/backups/${f.name}`);
+      await client().storage.from('photos').remove(toDelete);
+    }
+  }
+
   async function pushAll(onProgress) {
     const session = await getSession();
     if (!session) return { skipped: true };
@@ -167,5 +205,5 @@ window.Sync = (function () {
     return { objects: objects.length, photos: photos.length };
   }
 
-  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, deletePhoto: deletePhoto, wipeRemotePhotos: wipeRemotePhotos, fullSync: fullSync, pushAll: pushAll };
+  return { signInWithGoogle: signInWithGoogle, signOut: signOut, getSession: getSession, onAuthChange: onAuthChange, isLoggedIn: isLoggedIn, currentUser: currentUser, uploadPhoto: uploadPhoto, uploadObject: uploadObject, deletePhoto: deletePhoto, wipeRemotePhotos: wipeRemotePhotos, autoBackupIfDue: autoBackupIfDue, fullSync: fullSync, pushAll: pushAll };
 })();
