@@ -144,27 +144,38 @@ window.Sync = (function () {
     let n = 0;
     for (var j = 0; j < (photos || []).length; j++) {
       const rp = photos[j];
-      if (byRemoteId[rp.id]) continue; // já vinculada a um registro local
-
       const sig = sigOf(rp.data.objectId, rp.data.captureDate, rp.data.fileName);
-      const existingLocal = bySignature[sig];
-      if (existingLocal) {
-        const updates = { remoteId: rp.id };
-        if (!(existingLocal.blob instanceof Blob) && rp.storage_path) {
+      const localMatch = byRemoteId[rp.id] || bySignature[sig] || null;
+
+      if (localMatch) {
+        const updates = {};
+        if (!localMatch.remoteId) updates.remoteId = rp.id;
+        if (!(localMatch.blob instanceof Blob) && rp.storage_path) {
           if (onProgress) onProgress('Baixando foto ' + (++n) + '...');
           try {
-            const { data } = await client().storage.from('photos').download(rp.storage_path);
+            const { data, error } = await client().storage.from('photos').download(rp.storage_path);
+            if (error) console.warn('[Sync] Falha ao baixar foto', rp.storage_path, error);
             if (data) updates.blob = data;
-          } catch (e) {}
+          } catch (e) {
+            console.warn('[Sync] Falha ao baixar foto', rp.storage_path, e);
+          }
         }
-        await window.DB.updatePhoto(existingLocal.id, updates);
-        byRemoteId[rp.id] = existingLocal;
+        if (Object.keys(updates).length) await window.DB.updatePhoto(localMatch.id, updates);
+        byRemoteId[rp.id] = localMatch;
         continue;
       }
 
       if (onProgress) onProgress('Baixando foto ' + (++n) + '...');
       let blob = null;
-      if (rp.storage_path) { try { const { data } = await client().storage.from('photos').download(rp.storage_path); blob = data; } catch (e) {} }
+      if (rp.storage_path) {
+        try {
+          const { data, error } = await client().storage.from('photos').download(rp.storage_path);
+          if (error) console.warn('[Sync] Falha ao baixar foto', rp.storage_path, error);
+          blob = data;
+        } catch (e) {
+          console.warn('[Sync] Falha ao baixar foto', rp.storage_path, e);
+        }
+      }
       var photoData = Object.assign({}, rp.data, { blob: blob, remoteId: rp.id });
       delete photoData.id;
       const newId = await window.DB.addPhoto(photoData);
