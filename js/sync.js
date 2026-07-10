@@ -149,8 +149,15 @@ window.Sync = (function () {
       const sig = sigOf(rp.data.objectId, rp.data.captureDate, rp.data.fileName);
       const existingLocal = bySignature[sig];
       if (existingLocal) {
-        // mesma foto já existe localmente (sem remoteId ainda) — vincula em vez de duplicar
-        await window.DB.updatePhoto(existingLocal.id, { remoteId: rp.id });
+        const updates = { remoteId: rp.id };
+        if (!(existingLocal.blob instanceof Blob) && rp.storage_path) {
+          if (onProgress) onProgress('Baixando foto ' + (++n) + '...');
+          try {
+            const { data } = await client().storage.from('photos').download(rp.storage_path);
+            if (data) updates.blob = data;
+          } catch (e) {}
+        }
+        await window.DB.updatePhoto(existingLocal.id, updates);
         byRemoteId[rp.id] = existingLocal;
         continue;
       }
