@@ -104,11 +104,16 @@ window.App = (function () {
     syncInProgress = true;
     updateSyncStatus('Enviando...');
     try {
-      await window.Sync.pushAll((msg) => updateSyncStatus(msg));
-      await window.Sync.fullSync((msg) => updateSyncStatus(msg));
+      const pushResult = await window.Sync.pushAll((msg) => updateSyncStatus(msg));
+      const syncResult = await window.Sync.fullSync((msg) => updateSyncStatus(msg));
+      if ((pushResult && pushResult.skipped) || (syncResult && syncResult.skipped)) {
+        updateSyncStatus('⚠️ Sessão expirou — faça login de novo e tente outra vez.');
+        return;
+      }
       await refreshData();
       route();
       updateSyncStatus('Sincronizado ✓');
+      window.Sync.autoBackupIfDue().catch(() => {});
     } catch (e) {
       updateSyncStatus('Erro: ' + e.message);
     } finally {
