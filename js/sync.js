@@ -51,43 +51,44 @@ window.Sync = (function () {
     const session = await getSession();
     if (!session) throw new Error('Não autenticado');
     const uid = session.user.id;
-    let storagePath = localPhoto.storagePath || null;
-    if (localPhoto.blob && !localPhoto.remoteId) {
-      const ext = (localPhoto.fileName || 'jpg').split('.').pop();
-      storagePath = uid + '/' + localPhoto.id + '_' + Date.now() + '.' + ext;
-      const { error } = await client().storage.from('photos').upload(storagePath, localPhoto.blob, { upsert: true });
-      if (error) throw error;
-    }
+
     const meta = Object.assign({}, localPhoto);
     delete meta.blob; delete meta.objectUrl; delete meta.thumbBlob; delete meta.thumbUrl; delete meta.originalBlob;
 
-    if (localPhoto.remoteId) {
-      const { data: updated, error } = await client().from('photos').update({
-        storage_path: storagePath,
-        data: Object.assign({}, meta, { storagePath: storagePath }),
-        updated_at: new Date().toISOString(),
-      }).eq('id', localPhoto.remoteId).select('id');
+    async function uploadBlobFresh() {
+      if (!localPhoto.blob) return localPhoto.storagePath || null;
+      const ext = (localPhoto.fileName || 'jpg').split('.').pop();
+      const path = uid + '/' + localPhoto.id + '_' + Date.now() + '.' + ext;
+      const { error } = await client().storage.from('photos').upload(path, localPhoto.blob, { upsert: true });
       if (error) throw error;
-      if (!updated || !updated.length) {
-        // remoteId órfão (linha não existe mais na nuvem, ex: depois de um wipe) — insere de novo
-        const { data: inserted, error: insError } = await client().from('photos').insert({
-          user_id: uid,
-          object_id: localPhoto.objectId,
-          storage_path: storagePath,
-          data: Object.assign({}, meta, { storagePath: storagePath }),
-        }).select('id').single();
-        if (insError) throw insError;
-        await window.DB.updatePhoto(localPhoto.id, { remoteId: inserted.id });
-      }
-    } else {
-      const { data: inserted, error } = await client().from('photos').insert({
+      return path;
+    }
+
+    async function insertFresh() {
+      const storagePath = await uploadBlobFresh();
+      const { data: inserted, error: insError } = await client().from('photos').insert({
         user_id: uid,
         object_id: localPhoto.objectId,
         storage_path: storagePath,
         data: Object.assign({}, meta, { storagePath: storagePath }),
       }).select('id').single();
-      if (error) throw error;
+      if (insError) throw insError;
       await window.DB.updatePhoto(localPhoto.id, { remoteId: inserted.id });
+    }
+
+    if (localPhoto.remoteId) {
+      // só metadados aqui — a linha (e o arquivo) presumivelmente já existem
+      const { data: updated, error } = await client().from('photos').update({
+        data: Object.assign({}, meta, { storagePath: localPhoto.storagePath || null }),
+        updated_at: new Date().toISOString(),
+      }).eq('id', localPhoto.remoteId).select('id');
+      if (error) throw error;
+      if (!updated || !updated.length) {
+        // remoteId órfão (linha não existe mais na nuvem, ex: depois de um wipe) — reenvia o arquivo do zero
+        await insertFresh();
+      }
+    } else {
+      await insertFresh();
     }
   }
 
